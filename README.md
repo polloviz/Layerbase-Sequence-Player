@@ -103,8 +103,6 @@ Output in `dist\`:
 4. winget: `.\tools\make_winget.ps1 -InstallerUrl https://github.com/polloviz/Layerbase-Sequence-Player/releases/download/v<ver>/LayerbaseSequencePlayer-<ver>-Setup.exe`, check with `winget validate` and `winget install --manifest`, then open a pull request on https://github.com/microsoft/winget-pkgs. Signing the installer changes its hash: regenerate the manifests afterwards.
 
 - **FFmpeg** (`third_party/ffmpeg`): unmodified BtbN n8.1.3 GPL build, shipped with `FFMPEG_LICENSE.txt` and `FFMPEG_README.txt` (version, source code, source offer). `ffmpeg.exe` is not in the repository (165 MB, over GitHub's file limit): `build.ps1` downloads it with `tools/get_ffmpeg.ps1` (pinned version, verified hash). When updating FFmpeg, update `FFMPEG_README.txt` and the script.
-- **Press and community texts:** `press/press-release.md` (EN/IT + editor email), `press/community-posts.md` (forums, Reddit, LinkedIn, social, video script).
-
 ## Source layout
 
 | File | Role |
