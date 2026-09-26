@@ -1,0 +1,15 @@
+#pragma once
+#define APP_NAME          "Layerbase Sequence Player"
+#define APP_NAME_W        L"Layerbase Sequence Player"
+// Executable, ProgIDs and registry keys keep the original identifiers so updates
+// replace earlier installs and existing file associations keep working.
+#define APP_EXE_W         L"SequencePlayer.exe"
+#define APP_PROGID_PREFIX L"SequencePlayer"
+#define APP_VERSION       "@PROJECT_VERSION@"
+#define APP_PUBLISHER     "Layerbase Luxury Vision"
+#define APP_PUBLISHER_W   L"Layerbase Luxury Vision"
+#define APP_WEBSITE       "https://layerbase.it"
+#define APP_WEBSITE_W     L"https://layerbase.it"
+// Product page and update manifest (see installer/version.json).
+#define APP_PRODUCT_URL_W L"https://layerbase.it/sequence-player"
+#define APP_UPDATE_URL_W  L"https://layerbase.it/sequence-player/version.json"

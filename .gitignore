@@ -1,0 +1,6 @@
+build/
+dist/
+.vs/
+*.user
+# 165 MB, over GitHub's file limit: tools/get_ffmpeg.ps1 downloads it (build.ps1 does it automatically)
+third_party/ffmpeg/ffmpeg.exe

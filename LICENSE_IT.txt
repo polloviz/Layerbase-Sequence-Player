@@ -1,0 +1,49 @@
+﻿LAYERBASE SEQUENCE PLAYER - CONTRATTO DI LICENZA FREEWARE
+
+Copyright (c) 2026 Layerbase Luxury Vision. Tutti i diritti riservati.
+https://layerbase.it
+
+Layerbase Sequence Player ("il Software") è un programma freeware creato da Layerbase
+Luxury Vision. Installando o utilizzando il Software accetti i seguenti termini.
+
+1. CONCESSIONE DI LICENZA
+   Puoi installare e utilizzare il Software gratuitamente, per scopi personali
+   e commerciali, su un numero qualsiasi di computer.
+
+2. REDISTRIBUZIONE
+   Puoi redistribuire gratuitamente l'installer originale e non modificato,
+   a condizione che siano inclusi questa licenza e gli avvisi di terze parti.
+   Non puoi vendere il Software, chiedere compensi per la sua distribuzione,
+   includerlo in pacchetti a pagamento o presentarlo come opera tua.
+
+3. LIMITAZIONI
+   Non puoi modificare, decompilare o decodificare il Software, salvo nei limiti
+   consentiti dalla legge applicabile o dalle licenze dei componenti open source
+   elencati in THIRD_PARTY_NOTICES.txt.
+
+4. COMPONENTI DI TERZE PARTI
+   Il Software include componenti open source distribuiti secondo le rispettive
+   licenze (vedi THIRD_PARTY_NOTICES.txt), che prevalgono per tali componenti.
+   FFmpeg, usato per l'esportazione dei filmati, è un programma separato
+   soggetto alla propria licenza.
+
+5. MARCHI
+   ACES è un marchio della Academy of Motion Picture Arts and Sciences.
+   Apple e ProRes sono marchi di Apple Inc. OpenEXR e OpenColorIO sono progetti
+   della Academy Software Foundation. Tutti gli altri marchi appartengono ai
+   rispettivi proprietari. Il loro uso non implica approvazione.
+
+6. NESSUNA GARANZIA
+   IL SOFTWARE È FORNITO "COSÌ COM'È", SENZA GARANZIE DI ALCUN TIPO, ESPLICITE
+   O IMPLICITE, INCLUSE, A TITOLO ESEMPLIFICATIVO, LE GARANZIE DI
+   COMMERCIABILITÀ, IDONEITÀ A UNO SCOPO PARTICOLARE E NON VIOLAZIONE.
+
+7. LIMITAZIONE DI RESPONSABILITÀ
+   NEI LIMITI MASSIMI CONSENTITI DALLA LEGGE, LAYERBASE LUXURY VISION NON SARÀ
+   IN ALCUN CASO RESPONSABILE PER DANNI (INCLUSI PERDITA DI DATI, DI PROFITTI O
+   INTERRUZIONE DELL'ATTIVITÀ) DERIVANTI DALL'USO O DALL'IMPOSSIBILITÀ DI USARE
+   IL SOFTWARE, ANCHE SE AVVISATA DELLA POSSIBILITÀ DI TALI DANNI.
+
+8. RISOLUZIONE
+   Questa licenza cessa automaticamente in caso di mancato rispetto dei suoi
+   termini. In tal caso devi rimuovere tutte le copie del Software.
