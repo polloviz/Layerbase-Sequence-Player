@@ -73,6 +73,8 @@ void App::drawAbout()
             ImGui::TextUnformatted(APP_PUBLISHER);
             ImGui::PopStyleColor();
             if (ImGui::TextLink("layerbase.it")) OpenUrl(APP_WEBSITE_W);
+            ImGui::SameLine(0, 14 * s);
+            if (ImGui::TextLink(tr(S::SourceCode))) OpenUrl(APP_REPO_URL_W);
             ImGui::EndGroup();
 
             ImGui::Spacing();

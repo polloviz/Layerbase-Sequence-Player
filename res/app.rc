@@ -24,7 +24,7 @@ BEGIN
             VALUE "FileDescription", "Layerbase Sequence Player"
             VALUE "FileVersion", "1.2.0"
             VALUE "InternalName", "SequencePlayer"
-            VALUE "LegalCopyright", "(c) 2026 Layerbase Luxury Vision - Freeware - layerbase.it"
+            VALUE "LegalCopyright", "(c) 2026 Layerbase Luxury Vision - MIT License - layerbase.it"
             VALUE "OriginalFilename", "SequencePlayer.exe"
             VALUE "ProductName", "Layerbase Sequence Player"
             VALUE "ProductVersion", "1.2.0"

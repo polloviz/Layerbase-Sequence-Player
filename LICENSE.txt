@@ -1,49 +1,21 @@
-﻿LAYERBASE SEQUENCE PLAYER - FREEWARE LICENSE AGREEMENT
+MIT License
 
-Copyright (c) 2026 Layerbase Luxury Vision. All rights reserved.
-https://layerbase.it
+Copyright (c) 2026 Layerbase Luxury Vision
 
-Layerbase Sequence Player ("the Software") is freeware created by Layerbase Luxury Vision.
-By installing or using the Software you agree to the following terms.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. LICENSE GRANT
-   You may install and use the Software free of charge, for personal and
-   commercial purposes, on any number of computers.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. REDISTRIBUTION
-   You may redistribute the original, unmodified installer free of charge,
-   provided that this license and the third-party notices are included.
-   You may not sell the Software, charge for its distribution, include it in
-   paid bundles, or present it as your own work.
-
-3. RESTRICTIONS
-   You may not modify, decompile or reverse engineer the Software, except to
-   the extent permitted by applicable law or by the licenses of the
-   open-source components listed in THIRD_PARTY_NOTICES.txt.
-
-4. THIRD-PARTY COMPONENTS
-   The Software includes open-source components distributed under their own
-   licenses (see THIRD_PARTY_NOTICES.txt). Those licenses prevail for the
-   respective components. FFmpeg, used for movie export, is a separate
-   program and is subject to its own license.
-
-5. TRADEMARKS
-   ACES is a trademark of the Academy of Motion Picture Arts and Sciences.
-   Apple and ProRes are trademarks of Apple Inc. OpenEXR and OpenColorIO are
-   projects of the Academy Software Foundation. All other trademarks belong to
-   their respective owners. Their use does not imply endorsement.
-
-6. NO WARRANTY
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
-
-7. LIMITATION OF LIABILITY
-   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL LAYERBASE LUXURY
-   VISION BE LIABLE FOR ANY DAMAGES (INCLUDING LOSS OF DATA, PROFITS OR
-   BUSINESS INTERRUPTION) ARISING FROM THE USE OR INABILITY TO USE THE
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-
-8. TERMINATION
-   This license terminates automatically if you fail to comply with its
-   terms. Upon termination you must remove all copies of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

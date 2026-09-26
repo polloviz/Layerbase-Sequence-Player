@@ -86,20 +86,21 @@ PackageVersion: $version
 PackageLocale: en-US
 Publisher: Layerbase Luxury Vision
 PublisherUrl: https://layerbase.it
-PublisherSupportUrl: https://layerbase.it
+PublisherSupportUrl: https://github.com/polloviz/Layerbase-Sequence-Player/issues
 Author: Layerbase Luxury Vision
 PackageName: Layerbase Sequence Player
-PackageUrl: https://layerbase.it/sequence-player
-License: Freeware
-LicenseUrl: https://layerbase.it/sequence-player
+PackageUrl: https://github.com/polloviz/Layerbase-Sequence-Player
+License: MIT
+LicenseUrl: https://github.com/polloviz/Layerbase-Sequence-Player/blob/main/LICENSE.txt
 Copyright: (c) 2026 Layerbase Luxury Vision
+ReleaseNotesUrl: https://github.com/polloviz/Layerbase-Sequence-Player/releases
 ShortDescription: Fast image sequence player for EXR, DPX and more, with OCIO, ACES 2.0, AgX, Cryptomatte and movie export.
 Description: |-
   Layerbase Sequence Player opens image sequences (EXR, DPX, TIFF, PNG, JPEG...) instantly and plays them
   with GPU color management through OpenColorIO: ACES 2.0 and 1.3, built-in AgX, Blender and custom configs.
   It shows multi-layer EXR passes, isolates objects with Cryptomatte (including separate Cryptomatte
   sequences such as Octane's), and exports H.264, H.265 and ProRes (4444 with alpha) movies, one by one
-  or in batch. Freeware, also for commercial use.
+  or in batch. Free and open source (MIT), also for commercial use.
 Moniker: sequenceplayer
 Tags:
 - aces

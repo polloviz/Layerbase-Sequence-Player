@@ -1,7 +1,7 @@
 # Press kit — Layerbase Sequence Player 1.2
 
 Replace the placeholders before sending:
-`[DOWNLOAD URL]` product page · `[VIDEO URL]` demo video · `[CONTACT EMAIL]` · `[NAME]` sender name.
+`[VIDEO URL]` demo video · `[CONTACT EMAIL]` · `[NAME]` sender name.
 Attach 3–5 screenshots (ACES/AgX view, Cryptomatte panel, export dialog, batch dialog) and the program icon.
 Check before sending: the description of Layerbase Luxury Vision ("luxury product visualization, jewelry") and the
 quote are drafts to adapt, and the timings come from tests on one workstation.
@@ -15,7 +15,7 @@ quote are drafts to adapt, and the timings come from tests on one workstation.
 *Opens EXR renders in under half a second, with ACES 2.0, AgX and Cryptomatte, and exports ProRes and H.264 movies. Free for commercial use.*
 
 **Italy, [DATE]** — Layerbase Luxury Vision, a studio specialized in luxury product visualization, today released
-Layerbase Sequence Player 1.2 for Windows. The freeware tool is designed for artists who need to review renders quickly,
+Layerbase Sequence Player 1.2 for Windows. The free, open-source tool is designed for artists who need to review renders quickly,
 see them with the correct color management and turn them into client-ready movies without opening a compositing application.
 
 Layerbase Sequence Player opens a whole image sequence from a double-click on any frame. In internal tests on 1080p EXR
@@ -42,8 +42,8 @@ with Cryptomatte and send a preview to the client in a couple of minutes," said 
 **Availability**
 
 Layerbase Sequence Player 1.2 is available now for Windows 10 and 11 (64-bit) as an installer and as a portable zip.
-It is freeware, free for personal and commercial use, with an English and Italian interface.
-Download: [DOWNLOAD URL] · Demo video: [VIDEO URL]
+It is free and open source under the MIT license, also for commercial use, with an English and Italian interface.Source code: https://github.com/polloviz/Layerbase-Sequence-Player
+Download: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest · Demo video: [VIDEO URL]
 
 **About Layerbase Luxury Vision**
 
@@ -64,7 +64,7 @@ OpenColorIO and OpenEXR are projects of the Academy Software Foundation. All oth
 *Apre i render EXR in meno di mezzo secondo, con ACES 2.0, AgX e Cryptomatte, ed esporta filmati ProRes e H.264. Gratuito anche per uso commerciale.*
 
 **Italia, [DATA]** — Layerbase Luxury Vision, studio specializzato nella visualizzazione di prodotti di lusso, pubblica
-Layerbase Sequence Player 1.2 per Windows. Il programma freeware è pensato per chi deve rivedere i render velocemente,
+Layerbase Sequence Player 1.2 per Windows. Il programma, gratuito e open source, è pensato per chi deve rivedere i render velocemente,
 vederli con la gestione colore corretta e trasformarli in filmati pronti per il cliente senza aprire un software di compositing.
 
 Layerbase Sequence Player apre l'intera sequenza con un doppio clic su un frame qualsiasi. Nei test interni su render EXR
@@ -91,8 +91,8 @@ Layerbase Luxury Vision. "È diventato così utile che abbiamo deciso di regalar
 **Disponibilità**
 
 Layerbase Sequence Player 1.2 è disponibile per Windows 10 e 11 (64 bit), come installer e come zip portable.
-È freeware, gratuito per uso personale e commerciale, con interfaccia in italiano e inglese.
-Download: [DOWNLOAD URL] · Video dimostrativo: [VIDEO URL]
+È gratuito e open source con licenza MIT, anche per uso commerciale, con interfaccia in italiano e inglese.Codice sorgente: https://github.com/polloviz/Layerbase-Sequence-Player
+Download: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest · Video dimostrativo: [VIDEO URL]
 
 **Layerbase Luxury Vision**
 
@@ -120,7 +120,7 @@ In short:
   mask as alpha, or H.264/H.265 previews;
 - it batch-converts whole folders of sequences.
 
-It's freeware, commercial use included. Press release, screenshots and a 60-second demo are here: [DOWNLOAD URL] · [VIDEO URL]
+It's free and open source (MIT), commercial use included. Press release, screenshots and a 60-second demo are here: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest · [VIDEO URL]
 
 Happy to answer any questions or provide more material.
 

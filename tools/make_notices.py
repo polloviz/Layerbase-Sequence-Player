@@ -59,6 +59,15 @@ ffmpeg.exe distributed with it (FFmpeg n8.1.3, GPL build including x264 and
 x265) is licensed under the GNU General Public License version 3: see
 FFMPEG_LICENSE.txt and FFMPEG_README.txt (version, source code and build
 scripts) in the program folder. https://ffmpeg.org/legal.html
+
+================================================================================
+Trademarks
+================================================================================
+ACES is a trademark of the Academy of Motion Picture Arts and Sciences.
+Apple and ProRes are trademarks of Apple Inc. OpenEXR and OpenColorIO are
+projects of the Academy Software Foundation. FFmpeg is a trademark of Fabrice
+Bellard. All other trademarks belong to their respective owners; their use does
+not imply endorsement.
 """
 
 

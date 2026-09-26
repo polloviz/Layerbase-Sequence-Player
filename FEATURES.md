@@ -1,11 +1,11 @@
 # Layerbase Sequence Player — Features and Benefits
 
-**Freeware by [Layerbase Luxury Vision](https://layerbase.it)** · Windows 10/11 · English and Italian interface
+**Free and open source (MIT) by [Layerbase Luxury Vision](https://layerbase.it)** · Windows 10/11 · English and Italian interface · [Download](https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest) · [Source code](https://github.com/polloviz/Layerbase-Sequence-Player)
 
 Layerbase Sequence Player is an image sequence player for 3D rendering, VFX and motion graphics artists.
 It opens renders instantly (EXR, DPX, TIFF, PNG…) and shows them with correct color management (OCIO, ACES, AgX).
 You can isolate objects with Cryptomatte and export client-ready movies, one at a time or in batch.
-It is free, including for commercial use.
+It is free and open source, including for commercial use.
 
 ---
 
@@ -124,7 +124,7 @@ without going through compositing.
 - Everything included: FFmpeg for movie export ships with the program, and no runtimes need to be installed.
 - No account, no registration. The only network access is an optional daily update check that downloads a small version file:
   no personal data or usage statistics are sent, and you can turn it off in Settings.
-- **Freeware**: free for personal and commercial use.
+- **Open source (MIT license)**: free for personal and commercial use; the source code is on GitHub.
 - Built on industry-standard libraries: OpenColorIO and OpenEXR (Academy Software Foundation), FFmpeg for export.
 
 ---

@@ -71,8 +71,9 @@ enum class Lang { English = 0, Italian = 1 };
     X(BlenderConfigs,    "Blender (installed)",                   "Blender (installato)") \
     X(AboutTitle,        "About Layerbase Sequence Player",       "Informazioni su Layerbase Sequence Player") \
     X(CreatedBy,         "Created by",                            "Creato da") \
-    X(FreewareText,      "Freeware - free for personal and commercial use.", "Freeware - gratuito per uso personale e commerciale.") \
+    X(FreewareText,      "Free and open source (MIT license), also for commercial use.", "Gratuito e open source (licenza MIT), anche per uso commerciale.") \
     X(License,           "License",                               "Licenza") \
+    X(SourceCode,        "Source code (GitHub)",                  "Codice sorgente (GitHub)") \
     X(ThirdParty,        "Third-party licenses",                  "Licenze di terze parti") \
     X(Info,              "Info",                                  "Info") \
     X(Layer,             "Layer",                                 "Layer") \
@@ -100,8 +101,8 @@ enum class Lang { English = 0, Italian = 1 };
     X(Updates,           "Updates",                               "Aggiornamenti") \
     X(CheckUpdates,      "Check for updates (once a day)",        "Controlla aggiornamenti (una volta al giorno)") \
     X(CheckNow,          "Check now",                             "Controlla ora") \
-    X(UpdatePrivacy,     "Only a small version file is downloaded from layerbase.it: no personal data or usage statistics are sent.", \
-                                                                  "Viene scaricato solo un piccolo file di versione da layerbase.it: nessun dato personale o statistica d'uso viene inviato.") \
+    X(UpdatePrivacy,     "Only a small version file is downloaded from GitHub: no personal data or usage statistics are sent.", \
+                                                                  "Viene scaricato solo un piccolo file di versione da GitHub: nessun dato personale o statistica d'uso viene inviato.") \
     X(UpToDate,          "You have the latest version.",          "Hai già l'ultima versione.") \
     X(UpdateFailed,      "Could not check for updates.",          "Impossibile controllare gli aggiornamenti.") \
     X(UpdateAvailable,   "New version available",                 "Nuova versione disponibile") \

@@ -27,6 +27,6 @@ Source code
   medium: https://layerbase.it
 
 You can replace ffmpeg.exe with any other FFmpeg build: Layerbase Sequence
-Player uses the ffmpeg.exe next to its executable, or the one set in Settings.
+Player uses the ffmpeg.exe next to its executable, or the one chosen in the export dialog.
 
 FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.

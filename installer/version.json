@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "url": "https://layerbase.it/sequence-player",
-  "notes_en": "Cryptomatte from a separate sequence (Octane), In/Out buttons, bundled FFmpeg, portable version.",
-  "notes_it": "Cryptomatte da una sequenza separata (Octane), pulsanti In/Out, FFmpeg incluso, versione portable."
+  "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
+  "notes_en": "Cryptomatte from a separate sequence (Octane), In/Out buttons, bundled FFmpeg, portable version. Now open source (MIT).",
+  "notes_it": "Cryptomatte da una sequenza separata (Octane), pulsanti In/Out, FFmpeg incluso, versione portable. Ora open source (MIT)."
 }

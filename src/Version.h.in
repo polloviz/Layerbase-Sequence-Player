@@ -10,6 +10,7 @@
 #define APP_PUBLISHER_W   L"Layerbase Luxury Vision"
 #define APP_WEBSITE       "https://layerbase.it"
 #define APP_WEBSITE_W     L"https://layerbase.it"
-// Product page and update manifest (see installer/version.json).
-#define APP_PRODUCT_URL_W L"https://layerbase.it/sequence-player"
-#define APP_UPDATE_URL_W  L"https://layerbase.it/sequence-player/version.json"
+// Source code, downloads and update manifest (installer/version.json on main).
+#define APP_REPO_URL_W    L"https://github.com/polloviz/Layerbase-Sequence-Player"
+#define APP_PRODUCT_URL_W L"https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest"
+#define APP_UPDATE_URL_W  L"https://raw.githubusercontent.com/polloviz/Layerbase-Sequence-Player/main/installer/version.json"

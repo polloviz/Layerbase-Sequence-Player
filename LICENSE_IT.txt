@@ -1,49 +1,42 @@
-﻿LAYERBASE SEQUENCE PLAYER - CONTRATTO DI LICENZA FREEWARE
+LAYERBASE SEQUENCE PLAYER - LICENZA MIT
 
-Copyright (c) 2026 Layerbase Luxury Vision. Tutti i diritti riservati.
-https://layerbase.it
+Layerbase Sequence Player è software libero e open source, distribuito con la
+licenza MIT. Il testo vincolante è quello originale in inglese riportato sotto;
+questa è una sintesi informativa:
 
-Layerbase Sequence Player ("il Software") è un programma freeware creato da Layerbase
-Luxury Vision. Installando o utilizzando il Software accetti i seguenti termini.
+- puoi usare il programma gratuitamente, anche per lavori commerciali;
+- puoi copiarlo, modificarlo, unirlo ad altri programmi, pubblicarlo,
+  distribuirlo e venderlo;
+- devi includere l'avviso di copyright e il testo della licenza in tutte le
+  copie o parti sostanziali del software;
+- il software è fornito "così com'è", senza garanzie; gli autori non sono
+  responsabili per danni derivanti dal suo uso.
 
-1. CONCESSIONE DI LICENZA
-   Puoi installare e utilizzare il Software gratuitamente, per scopi personali
-   e commerciali, su un numero qualsiasi di computer.
+I componenti di terze parti (OpenColorIO, OpenEXR, FFmpeg, ...) hanno le
+proprie licenze, elencate in THIRD_PARTY_NOTICES.txt e FFMPEG_README.txt.
 
-2. REDISTRIBUZIONE
-   Puoi redistribuire gratuitamente l'installer originale e non modificato,
-   a condizione che siano inclusi questa licenza e gli avvisi di terze parti.
-   Non puoi vendere il Software, chiedere compensi per la sua distribuzione,
-   includerlo in pacchetti a pagamento o presentarlo come opera tua.
+Codice sorgente: https://github.com/polloviz/Layerbase-Sequence-Player
 
-3. LIMITAZIONI
-   Non puoi modificare, decompilare o decodificare il Software, salvo nei limiti
-   consentiti dalla legge applicabile o dalle licenze dei componenti open source
-   elencati in THIRD_PARTY_NOTICES.txt.
+--------------------------------------------------------------------------------
 
-4. COMPONENTI DI TERZE PARTI
-   Il Software include componenti open source distribuiti secondo le rispettive
-   licenze (vedi THIRD_PARTY_NOTICES.txt), che prevalgono per tali componenti.
-   FFmpeg, usato per l'esportazione dei filmati, è un programma separato
-   soggetto alla propria licenza.
+MIT License
 
-5. MARCHI
-   ACES è un marchio della Academy of Motion Picture Arts and Sciences.
-   Apple e ProRes sono marchi di Apple Inc. OpenEXR e OpenColorIO sono progetti
-   della Academy Software Foundation. Tutti gli altri marchi appartengono ai
-   rispettivi proprietari. Il loro uso non implica approvazione.
+Copyright (c) 2026 Layerbase Luxury Vision
 
-6. NESSUNA GARANZIA
-   IL SOFTWARE È FORNITO "COSÌ COM'È", SENZA GARANZIE DI ALCUN TIPO, ESPLICITE
-   O IMPLICITE, INCLUSE, A TITOLO ESEMPLIFICATIVO, LE GARANZIE DI
-   COMMERCIABILITÀ, IDONEITÀ A UNO SCOPO PARTICOLARE E NON VIOLAZIONE.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-7. LIMITAZIONE DI RESPONSABILITÀ
-   NEI LIMITI MASSIMI CONSENTITI DALLA LEGGE, LAYERBASE LUXURY VISION NON SARÀ
-   IN ALCUN CASO RESPONSABILE PER DANNI (INCLUSI PERDITA DI DATI, DI PROFITTI O
-   INTERRUZIONE DELL'ATTIVITÀ) DERIVANTI DALL'USO O DALL'IMPOSSIBILITÀ DI USARE
-   IL SOFTWARE, ANCHE SE AVVISATA DELLA POSSIBILITÀ DI TALI DANNI.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-8. RISOLUZIONE
-   Questa licenza cessa automaticamente in caso di mancato rispetto dei suoi
-   termini. In tal caso devi rimuovere tutte le copie del Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

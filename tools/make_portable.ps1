@@ -29,7 +29,8 @@ Versione portable: avvia SequencePlayer.exe. Non viene installato nulla e il
 registro non viene modificato: le impostazioni sono salvate nella cartella
 "data" accanto al programma. Elimina questo file per usare %APPDATA%.
 
-Freeware by Layerbase Luxury Vision - https://layerbase.it
+Open source (MIT) by Layerbase Luxury Vision - https://layerbase.it
+https://github.com/polloviz/Layerbase-Sequence-Player
 "@ | Set-Content "$stage\portable.txt" -Encoding utf8
 
 New-Item -ItemType Directory -Force "$Root\dist" | Out-Null

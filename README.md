@@ -1,120 +1,133 @@
-﻿# Layerbase Sequence Player
+<p align="center"><img src="res/logo.png" width="128" alt="Layerbase Sequence Player"></p>
 
-**Freeware di [Layerbase Luxury Vision](https://layerbase.it)** — gratuito per uso personale e commerciale (vedi [LICENSE.txt](LICENSE.txt) / [LICENSE_IT.txt](LICENSE_IT.txt); componenti di terze parti in [res/THIRD_PARTY_NOTICES.txt](res/THIRD_PARTY_NOTICES.txt)).
+# Layerbase Sequence Player
 
-Player di sequenze di immagini per Windows, veloce e minimale, con gestione colore OpenColorIO (ACES 1.3 e ACES 2.0).
-Il nome visualizzato è *Layerbase Sequence Player*; exe (`SequencePlayer.exe`), ProgID e chiavi di registro mantengono gli identificativi originali, così gli aggiornamenti sostituiscono la 1.1.
-Interfaccia in **inglese** e **italiano** (rilevata dalla lingua di Windows, modificabile nelle Impostazioni).
+**Fast image sequence player for Windows, with OpenColorIO (ACES 2.0 / 1.3, AgX), multi-layer EXR, Cryptomatte and movie export.**
+Free and open source ([MIT](LICENSE.txt)) · by [Layerbase Luxury Vision](https://layerbase.it) · English and Italian interface
 
-## Funzioni
+**[⬇ Download the latest release](https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest)** — installer or portable zip · Windows 10/11 64-bit, OpenGL 4.1 GPU
 
-- **Formati:** EXR (half/float, tutte le compressioni, data/display window), DPX (8/10/12/16 bit), TIFF (8/16 bit, half/float), PNG (8/16 bit), JPEG, TGA, BMP, HDR, PSD.
-- **Sequenze:** aprendo un file qualsiasi (`shot.1001.exr`, anche `render_1001_v02.exr`) viene caricata l'intera sequenza della cartella, partendo dal frame aperto. I buchi nella numerazione sono ammessi. Si può trascinare nella finestra un file o una cartella. Selezionando più frame in Esplora risorse e premendo Invio si apre una sola finestra.
-- **Avvio rapido:** exe unico statico. La decodifica del primo frame parte *prima* della creazione della finestra; la cache multi-thread riempie la RAM in background (timeline: blu = in cache, rosso = errore).
-- **Colore (OCIO 2.5, trasformazione su GPU):**
-  - config integrate: **ACES 2.0** Studio/CG (predefinita), ACES 1.3 e tutte le altre fornite da OCIO;
-  - **config.ocio personalizzate** (menu *Config → Carica config.ocio personalizzata…*, oppure `--config`): vengono usati colorspace, display, view, look e file rules del config; le config recenti restano nel menu;
-  - config dalla variabile d'ambiente `$OCIO`;
-  - **AgX:** le config di **Blender** installate compaiono nel menu Config (AgX originale con i suoi look, Filmic, ecc.); in più il menu View di *qualsiasi* config offre *AgX / AgX Punchy / AgX Golden · built-in* (formulazione Blender/Filament, SDR sRGB, Rec.1886 o Display P3 in base al display);
-  - Input (con ricerca e raggruppamento per famiglia), Display, View, Look, esposizione (EV) e gamma;
-  - input automatico: EXR/HDR → `scene_linear` (ACEScg), formati interi → sRGB; per le config custom valgono le file rules. L'ultima scelta viene ricordata per config e per classe di formato;
-  - pulsante **OCIO** per disattivare la gestione colore.
-- **Riproduzione:** frame rate predefinito **30 fps** (preset 12–120 o valore personalizzato), loop / una volta / ping-pong, punti in/out (pulsanti ai lati dei controlli di riproduzione, tasti I/O; clic sull'etichetta In/Out per azzerare), riproduzione al contrario, fps effettivi mostrati durante il play.
-- **Visualizzazione:** adatta/100%, zoom con rotella sul cursore, pan, canali R/G/B/A/Luma, ispettore pixel (valori float sotto il cursore), schermo intero, UI nascondibile.
-- **Export filmati (Ctrl+E):** H.264 e H.265 (MP4, software x264/x265 o NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ e 4444 (MOV). Il colore viene applicato esattamente come lo vedi (input → display/view, look, esposizione, gamma, canale), su GPU; H.265 e ProRes partono da 16 bit per canale. Il file viene marcato con primarie/transfer del display (sRGB, Rec.1886, P3, Rec.2020, PQ). Intervallo completo o in/out, scala 100/50/25%, frame rate. Usa **FFmpeg** (cercato accanto all'exe, nel PATH, in `C:\FFMPEG\bin`, winget, choco, oppure indicato a mano).
-- **EXR multi-layer:** layer e file multi-part vengono elencati nel menu *Layer* (barra in basso); si visualizza ed esporta il layer scelto (vettori XYZ e canali singoli come Z vengono mostrati in RGB / grigio). Il layer scelto resta attivo passando a un altro shot che lo contiene.
-- **Cryptomatte:** pulsante *Cryptomatte* (barra in basso) apre il pannello: layer (CryptoObject/Material/Asset), modalità *ID* (colori per oggetto), *Evidenzia*, *Mascherato* (solo gli oggetti selezionati, in scene-linear prima della view), *Matte* (maschera in bianco e nero). Si selezionano oggetti cliccando nel viewer o dall'elenco del manifest (con ricerca). Maschera applicata a riproduzione ed export; in ProRes 4444 può diventare il canale alpha. Canali letti senza distinzione maiuscole/minuscole (Octane scrive `.r/.g/.b/.a`). Un file con solo Cryptomatte si apre direttamente in modalità ID.
-  - **Sequenza Cryptomatte esterna:** con una sequenza aperta, *Carica sequenza Cryptomatte…* (pannello o menu) usa i Cryptomatte di un'altra sequenza (es. pass `cm-*` di Octane) per mascherarla. Frame abbinati per numero (per posizione se le numerazioni non coincidono), risoluzione diversa scalata. Funziona con beauty di qualsiasi formato. Aprendo un altro shot il matte esterno viene rimosso (quindi non si applica al batch).
-- **Conversione batch (Ctrl+B):** aggiungi sequenze (selezione multipla), una cartella (con sottocartelle) o trascina più file/cartelle nella finestra; tutte le sequenze trovate vengono convertite con le stesse impostazioni (formato, qualità, dimensione, fps, layer, colore). Destinazione accanto a ogni sequenza o in una cartella unica, con salto dei file già esistenti e stato per ogni sequenza.
-- **Integrazione Windows:** l'installer registra i formati → Layerbase Sequence Player compare in **"Apri con"** e nelle **App predefinite** di Windows; per le estensioni senza programma associato (es. `.exr`, `.dpx` su molti PC) diventa direttamente il predefinito. Windows non permette ai programmi di impostarsi da soli come predefiniti per estensioni già associate: il pulsante *Imposta come app predefinita…* (Impostazioni) apre la pagina di Windows già filtrata.
+What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 
-## Scorciatoie
+## Features
 
-| Tasto | Azione |
+- **Formats:** EXR (half/float, all compressions, data/display window, multi-layer, multi-part), DPX (8/10/12/16-bit), TIFF (8/16-bit, half/float), PNG (8/16-bit), JPEG, TGA, BMP, HDR, PSD.
+- **Sequences:** opening any file (`shot.1001.exr`, also `render_1001_v02.exr`) loads the whole sequence in the folder, starting from that frame. Gaps in numbering are allowed. Files or folders can be dropped onto the window. Selecting several frames in File Explorer and pressing Enter opens a single window.
+- **Fast startup:** a single static exe. The first frame starts decoding *before* the window is created; a multi-threaded cache fills RAM in the background (timeline: blue = cached, red = error).
+- **Color (OCIO 2.5, transform on the GPU):**
+  - built-in configs: **ACES 2.0** Studio/CG (default), ACES 1.3 and all the others shipped with OCIO;
+  - **custom config.ocio** (*Config → Load custom config.ocio…* or `--config`): uses its color spaces, displays, views, looks and file rules; recent configs stay in the menu;
+  - config from the `$OCIO` environment variable;
+  - **AgX:** installed **Blender** configs appear in the Config menu (original AgX with its looks, Filmic…); on top of that the View menu of *any* config offers *AgX / AgX Punchy / AgX Golden · built-in* (Blender/Filament formulation, SDR sRGB, Rec.1886 or Display P3 depending on the display);
+  - Input (searchable, grouped by family), Display, View, Look, exposure (EV) and gamma;
+  - automatic input: EXR/HDR → `scene_linear` (ACEScg), integer formats → sRGB; custom configs use their file rules. The last choice is remembered per config and per format class;
+  - **OCIO** button to turn color management off.
+- **Playback:** default **30 fps** (presets 12–120 or custom), loop / once / ping-pong, In/Out points (buttons beside the transport, I/O keys; click the In/Out label to clear), reverse playback, actual fps shown while playing.
+- **Viewing:** fit/100%, wheel zoom around the cursor, pan, R/G/B/A/Luma channels, pixel inspector (float values under the cursor), fullscreen, hideable UI.
+- **Movie export (Ctrl+E):** H.264 and H.265 (MP4, x264/x265 or NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ and 4444 (MOV). Color is applied exactly as displayed (input → display/view, look, exposure, gamma, channel) on the GPU; H.265 and ProRes are fed 16 bits per channel. Files are tagged with the display primaries/transfer (sRGB, Rec.1886, P3, Rec.2020, PQ). Full range or In/Out, 100/50/25% scale, frame rate. **FFmpeg is included**; another build can be chosen in the export dialog (also searched in PATH, `C:\FFMPEG\bin`, winget, choco).
+- **Multi-layer EXR:** layers and multi-part files are listed in the *Layer* menu (bottom bar); the selected layer is shown and exported (XYZ vectors and single channels such as Z are shown as RGB / gray). The layer stays selected when opening another shot that contains it.
+- **Cryptomatte:** the *Cryptomatte* button (bottom bar) opens the panel: layer (CryptoObject/Material/Asset), *IDs* (colors per object), *Overlay*, *Masked* (only the selection, in scene-linear before the view), *Matte* (black and white mask). Select objects by clicking in the viewer or from the manifest list (searchable). The mask applies to playback and export; in ProRes 4444 it can become the alpha channel. Channel names are matched case-insensitively (Octane writes `.r/.g/.b/.a`). A Cryptomatte-only file opens in IDs mode.
+  - **External Cryptomatte sequence:** with a sequence open, *Load Cryptomatte sequence…* (panel or menu) masks it with the Cryptomatte of another sequence (e.g. Octane's `cm-*` pass). Frames are matched by number (by position if the numbering differs); a different resolution is scaled. Works with a beauty in any format. Opening another shot removes the external matte, so it does not apply to batch conversion.
+- **Batch conversion (Ctrl+B):** add sequences (multi-select), a folder (with subfolders) or drop several files/folders on the window; every sequence found is converted with the same settings (format, quality, size, fps, layer, color). Output next to each sequence or into one folder, skipping existing files, with per-sequence status.
+- **Windows integration:** the installer registers the formats → the player appears in **"Open with"** and in **Default apps**; for extensions without an associated program (often `.exr`, `.dpx`) it becomes the default. Windows does not let programs make themselves the default for extensions that are already associated: *Set as default app…* (Settings) opens the right Windows page.
+- **Portable mode:** `portable.txt` next to the exe keeps settings in a `data` folder beside it, with nothing written to the registry.
+- **Update check:** at most once a day, `installer/version.json` is read from this repository; a newer version shows a dismissible banner. It can be turned off in Settings; no personal data or statistics are sent.
+
+## Shortcuts
+
+| Key | Action |
 |---|---|
-| Spazio | play / pausa |
-| J / K / L | indietro / stop / avanti |
-| ← / → (Shift = 10) | frame precedente / successivo |
-| Home / Fine | primo / ultimo frame |
-| I / O / U | punto in / out / azzera |
-| F, 1, 2, 3 | adatta, 100%, 200%, 50% |
-| Rotella, trascina (sinistro/centrale) | zoom, pan |
-| R G B A Y, C | canali, torna a RGB |
-| `-` `+` (o `[` `]`) , Backspace | esposizione ±0.5 EV, reset esposizione/gamma |
-| Tab | nascondi interfaccia |
-| F11 / Invio / doppio clic | schermo intero |
-| Ctrl+O / Ctrl+Shift+O | apri file / cartella |
-| Ctrl+E | esporta filmato |
-| Ctrl+B | conversione batch |
-| clic nel viewer (Cryptomatte attivo) | aggiunge / toglie l'oggetto dalla maschera |
+| Space | play / pause |
+| J / K / L | reverse / stop / forward |
+| ← / → (Shift = 10) | previous / next frame |
+| Home / End | first / last frame |
+| I / O / U | set in / set out / clear |
+| F, 1, 2, 3 | fit, 100%, 200%, 50% |
+| Wheel, drag (left/middle) | zoom, pan |
+| R G B A Y, C | channels, back to RGB |
+| `-` `+` (or `[` `]`), Backspace | exposure ±0.5 EV, reset exposure/gamma |
+| Tab | hide interface |
+| F11 / Enter / double-click | fullscreen |
+| Ctrl+O / Ctrl+Shift+O | open file / folder |
+| Ctrl+E | export movie |
+| Ctrl+B | batch convert |
+| click in viewer (Cryptomatte on) | add / remove the object from the mask |
 
-## Riga di comando
+## Command line
 
 ```
 SequencePlayer.exe [--fps 24] [--play] [--config C:\path\config.ocio | ocio://studio-config-latest]
-                   [--display "sRGB - Display"] [--view "ACES 2.0 - SDR 100 nits (Rec.709)"] [file o cartella]
+                   [--display "sRGB - Display"] [--view "ACES 2.0 - SDR 100 nits (Rec.709)"] [file or folder]
 SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha]
-                   esporta senza interazione e chiude (exit code 0 = ok)
+                   exports without interaction, then exits (exit code 0 = ok)
 SequencePlayer.exe --batch D:\renders [--out-dir D:\movies] [--codec h264] [--nvenc] [--overwrite]
-                   converte tutte le sequenze della cartella e sottocartelle e chiude
-Opzioni EXR:       [--layer diffuse] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select ball,floor]
-                   [--crypto-seq D:\render\cm\shot_cm_0000.exr]   matte da una sequenza Cryptomatte esterna
-Le opzioni da riga di comando non modificano le impostazioni salvate.
-SequencePlayer.exe --register      registra i formati (per-utente, senza admin)
-SequencePlayer.exe --unregister    rimuove la registrazione
+                   converts every sequence in the folder and subfolders, then exits
+EXR options:       [--layer diffuse] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select ball,floor]
+                   [--crypto-seq D:\render\cm\shot_cm_0000.exr]   mask from an external Cryptomatte sequence
+Command-line options never change the saved settings.
+SequencePlayer.exe --register      registers the formats (per user, no admin)
+SequencePlayer.exe --unregister    removes the registration
 ```
 
-Debug: con la variabile d'ambiente `SP_LOG=1` viene scritto `%TEMP%\SequencePlayer.log` con i tempi di avvio.
+Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto` opens a dialog at startup; `SP_UPDATE_URL=<url>` uses another update manifest.
 
-Elenco completo delle funzioni e dei vantaggi per gli utenti: [FEATURES.md](FEATURES.md).
+## Building
 
-## Compilazione
-
-Requisiti: Visual Studio 2022/2026 con C++, Git. L'installer richiede Inno Setup 6 o 7.
+Requirements: Visual Studio 2022/2026 with C++, Git. The installer needs Inno Setup 6 or 7.
 
 ```powershell
-.\build.ps1                 # dipendenze vcpkg + exe + zip portable + installer (dist\)
-.\build.ps1 -SkipInstaller  # solo exe (build\Release\SequencePlayer.exe)
-.\build.ps1 -FFmpeg C:\path\ffmpeg.exe      # sostituisce l'FFmpeg incluso (third_party\ffmpeg)
-.\build.ps1 -InstallerUrl <url>          # genera anche i manifest winget (dist\winget)
+.\build.ps1                               # vcpkg dependencies + exe + portable zip + installer (dist\)
+.\build.ps1 -SkipInstaller                # exe only (build\Release\SequencePlayer.exe)
+.\build.ps1 -FFmpeg C:\path\ffmpeg.exe    # replace the bundled FFmpeg (third_party\ffmpeg)
+.\build.ps1 -InstallerUrl <url>           # also write the winget manifests (dist\winget)
 ```
 
-Le dipendenze (OpenColorIO, OpenEXR, libtiff, Dear ImGui, GLEW, stb) vengono compilate da vcpkg con triplet `x64-windows-static`.
-vcpkg e il progetto devono usare lo stesso toolset MSVC: `build.ps1` usa l'ultima versione di Visual Studio installata.
+Dependencies (OpenColorIO, OpenEXR, libtiff, Dear ImGui, GLEW, stb) are built by vcpkg with the `x64-windows-static` triplet.
+vcpkg and the project must use the same MSVC toolset: `build.ps1` uses the newest Visual Studio installed.
 
-## Distribuzione
+The display name is *Layerbase Sequence Player*; the exe (`SequencePlayer.exe`), ProgIDs and registry keys keep their original identifiers so that updates replace version 1.1 in place.
+
+## Releasing
 
 Output in `dist\`:
 
-| File | Contenuto |
+| File | Content |
 |---|---|
-| `LayerbaseSequencePlayer-<ver>-Setup.exe` | installer (per utente o per tutti), con FFmpeg |
-| `LayerbaseSequencePlayer-<ver>-Portable.zip` | cartella da estrarre: `portable.txt` accanto all'exe salva le impostazioni in `data\` e non tocca il registro |
-| `winget\manifests\...` | manifest winget (con `-InstallerUrl`) |
+| `LayerbaseSequencePlayer-<ver>-Setup.exe` | installer (per user or all users), with FFmpeg |
+| `LayerbaseSequencePlayer-<ver>-Portable.zip` | folder to extract; `portable.txt` keeps settings in `data\` |
+| `winget\manifests\...` | winget manifests (with `-InstallerUrl`) |
 
-- **FFmpeg** (`third_party\ffmpeg`): build BtbN n8.1.3 GPL, copiata invariata con `FFMPEG_LICENSE.txt` e `FFMPEG_README.txt` (versione, sorgenti, offerta dei sorgenti). `ffmpeg.exe` non è nel repository (165 MB, oltre il limite di GitHub): `build.ps1` lo scarica con `tools\get_ffmpeg.ps1` (versione fissata, hash verificato). Aggiornando FFmpeg, aggiorna `FFMPEG_README.txt` e lo script.
-- **Aggiornamenti:** il programma legge `https://layerbase.it/sequence-player/version.json` (al massimo una volta al giorno, disattivabile nelle Impostazioni). Per ogni versione carica sul sito `installer\version.json` aggiornato (`version`, `url`, `notes_en`, `notes_it`). Finché il file non esiste il controllo fallisce in silenzio. Test: `SP_UPDATE_URL=http://127.0.0.1:8765/version.json`.
-- **winget:** carica l'installer definitivo (firmato) dove resterà (es. GitHub Releases), poi `.\tools\make_winget.ps1 -InstallerUrl <url>`; verifica con `winget validate` e `winget install --manifest`, poi proponi la cartella in una pull request su https://github.com/microsoft/winget-pkgs. Firmare l'installer dopo aver generato i manifest cambia l'hash: rigenerali.
-- **Comunicati e post:** `press\press-release.md` (EN/IT + email per le redazioni), `press\community-posts.md` (forum, Reddit, LinkedIn, social, script del video).
-## Struttura
+1. Bump the version in `CMakeLists.txt`, `res/app.rc` and `installer/SequencePlayer.iss`, then run `.\build.ps1`.
+2. Publish a GitHub release `v<ver>` with the installer and the portable zip.
+3. Update `installer/version.json` (`version`, `url`, `notes_en`, `notes_it`) and push it to `main`: installed copies will show the update banner.
+4. winget: `.\tools\make_winget.ps1 -InstallerUrl https://github.com/polloviz/Layerbase-Sequence-Player/releases/download/v<ver>/LayerbaseSequencePlayer-<ver>-Setup.exe`, check with `winget validate` and `winget install --manifest`, then open a pull request on https://github.com/microsoft/winget-pkgs. Signing the installer changes its hash: regenerate the manifests afterwards.
 
-| File | Ruolo |
+- **FFmpeg** (`third_party/ffmpeg`): unmodified BtbN n8.1.3 GPL build, shipped with `FFMPEG_LICENSE.txt` and `FFMPEG_README.txt` (version, source code, source offer). `ffmpeg.exe` is not in the repository (165 MB, over GitHub's file limit): `build.ps1` downloads it with `tools/get_ffmpeg.ps1` (pinned version, verified hash). When updating FFmpeg, update `FFMPEG_README.txt` and the script.
+- **Press and community texts:** `press/press-release.md` (EN/IT + editor email), `press/community-posts.md` (forums, Reddit, LinkedIn, social, video script).
+
+## Source layout
+
+| File | Role |
 |---|---|
-| `src/App.cpp` | finestra Win32, contesto OpenGL 4.1, loop, riproduzione, input |
-| `src/UI.cpp` | interfaccia (barra colore, timeline, trasporto, impostazioni) |
-| `src/ColorManager.cpp` | config OCIO, liste colorspace/display/view/look, processor |
-| `src/GLViewer.cpp` | shader GLSL generato da OCIO, texture LUT, disegno immagine |
-| `src/ColorAgx.cpp` | AgX integrato (trasformazioni OCIO native), rilevamento config Blender |
-| `src/Export.cpp`, `src/ExportUI.cpp` | export filmati via FFmpeg (pipe), dialogo e avanzamento |
-| `src/ExrLayers.cpp`, `src/CryptoUI.cpp` | EXR multi-layer/multi-part, decodifica Cryptomatte, pannello |
-| `src/BatchUI.cpp` | conversione batch (ricerca ricorsiva, coda, stato) |
-| `src/AboutUI.cpp` | finestra About (Layerbase Luxury Vision, licenze) |
-| `tools/make_icon.py`, `tools/make_notices.py` | icone da `res/*_icon.png`, avvisi di terze parti da vcpkg |
-| `src/FrameCache.cpp` | decodifica multi-thread con cache a budget di memoria |
-| `src/ImageIO.cpp` | lettori EXR, DPX, TIFF, stb |
-| `src/Sequence.cpp` | rilevamento sequenze dal nome file |
-| `src/Platform.cpp` | registro di Windows ("Apri con"), dialoghi, utilità |
-| `src/I18n.h` | tutte le stringhe EN/IT |
-| `src/UpdateCheck.cpp`, `src/UpdateUI.cpp` | controllo aggiornamenti facoltativo (WinHTTP) e avviso |
-| `installer/SequencePlayer.iss` | installer Inno Setup (EN/IT) |
-| `tools/make_portable.ps1`, `tools/make_winget.ps1` | zip portable, manifest winget |
+| `src/App.cpp` | Win32 window, OpenGL 4.1 context, main loop, playback, input |
+| `src/UI.cpp` | interface (color bar, timeline, transport, settings) |
+| `src/ColorManager.cpp` | OCIO configs, color space/display/view/look lists, processors |
+| `src/GLViewer.cpp` | OCIO-generated GLSL shader, LUT textures, image drawing |
+| `src/ColorAgx.cpp` | built-in AgX (native OCIO transforms), Blender config discovery |
+| `src/Export.cpp`, `src/ExportUI.cpp` | movie export through FFmpeg (pipe), dialog and progress |
+| `src/ExrLayers.cpp`, `src/CryptoUI.cpp` | multi-layer/multi-part EXR, Cryptomatte decoding, panel |
+| `src/BatchUI.cpp` | batch conversion (recursive search, queue, status) |
+| `src/AboutUI.cpp` | About dialog (credits, licenses) |
+| `src/UpdateCheck.cpp`, `src/UpdateUI.cpp` | optional update check (WinHTTP) and banner |
+| `src/FrameCache.cpp` | multi-threaded decoding with a memory-budgeted cache |
+| `src/ImageIO.cpp` | EXR, DPX, TIFF and stb readers |
+| `src/Sequence.cpp` | sequence detection from file names |
+| `src/Platform.cpp` | Windows registry ("Open with"), dialogs, HTTP, utilities |
+| `src/I18n.h` | all EN/IT strings |
+| `installer/SequencePlayer.iss` | Inno Setup installer (EN/IT) |
+| `tools/make_icon.py`, `tools/make_notices.py` | icons from `res/*_icon.png`, third-party notices from vcpkg |
+| `tools/make_portable.ps1`, `tools/make_winget.ps1`, `tools/get_ffmpeg.ps1` | portable zip, winget manifests, FFmpeg download |
+
+## License
+
+[MIT](LICENSE.txt) © 2026 Layerbase Luxury Vision. Third-party components keep their own licenses: see [res/THIRD_PARTY_NOTICES.txt](res/THIRD_PARTY_NOTICES.txt) and [third_party/ffmpeg/FFMPEG_README.txt](third_party/ffmpeg/FFMPEG_README.txt) (FFmpeg is GPLv3 and runs as a separate program).

@@ -1,6 +1,6 @@
 # Community posts — Layerbase Sequence Player 1.2
 
-Replace `[DOWNLOAD URL]` and `[VIDEO URL]`. Post from a personal account, stay in the thread to answer questions,
+Replace `[VIDEO URL]`. Post from a personal account, stay in the thread to answer questions,
 and read each community's rules on self-promotion first (some subreddits allow tools only in weekly threads or with a flair).
 Each post leads with a problem that community has; do not paste the same text everywhere.
 
@@ -19,7 +19,7 @@ many viewers either don't read it or can't apply it to the beauty. We made a fre
 4. export ProRes 4444 with the selection as the alpha channel, or H.264 with the rest masked out.
 
 It also plays EXR sequences with ACES 2.0 / AgX / custom OCIO configs, shows multi-layer passes and batch-converts folders.
-Freeware, commercial use included: [DOWNLOAD URL] · 1-minute demo: [VIDEO URL]
+Free and open source (MIT), commercial use included: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest · 1-minute demo: [VIDEO URL]
 
 Feedback from Octane users is very welcome, especially Cryptomatte setups we haven't tested.
 
@@ -34,7 +34,7 @@ Layerbase Sequence Player opens the whole sequence from a double-click on any fr
 shows it through OCIO with ACES 2.0 or your own config, and exports H.264/H.265/ProRes with the same colors you see.
 Multi-layer EXR, Cryptomatte (Octane, Redshift, Arnold…) and batch conversion of whole folders are in too.
 
-Free, also for commercial work, Windows only: [DOWNLOAD URL]
+Free, also for commercial work, Windows only: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest
 Happy to hear what's missing for your workflow.
 
 ---
@@ -48,7 +48,7 @@ This one finds your installed Blender OCIO configs automatically (AgX with its l
 AgX / AgX Punchy / AgX Golden views for any config. It plays full sequences from RAM, shows every render pass of multi-layer
 EXRs, isolates objects with Cryptomatte and exports H.264 or ProRes with the colors you see.
 
-Windows, freeware (commercial use OK): [DOWNLOAD URL] · demo: [VIDEO URL]
+Windows, free and open source (MIT, commercial use OK): https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest · demo: [VIDEO URL]
 
 ---
 
@@ -56,7 +56,7 @@ Windows, freeware (commercial use OK): [DOWNLOAD URL] · demo: [VIDEO URL]
 
 **Title:** Free Windows sequence player: EXR multi-part, OCIO/ACES 2.0 on GPU, Cryptomatte, ProRes 4444 alpha, batch
 
-Built this for our own reviews at a product-viz studio and decided to release it as freeware:
+Built this for our own reviews at a product-viz studio and decided to release it as open source (MIT):
 
 - instant start (sequence detection from any frame, multi-threaded RAM cache);
 - OCIO 2.5 on the GPU: ACES 2.0/1.3, custom configs with file rules and looks, EV/gamma, pixel inspector with float values;
@@ -64,7 +64,7 @@ Built this for our own reviews at a product-viz studio and decided to release it
 - export H.264/H.265 (x264/x265/NVENC) and ProRes Proxy→4444, 16-bit source for H.265/ProRes, color tags written;
 - batch conversion of folder trees, command line for pipeline use.
 
-[DOWNLOAD URL]. Not trying to replace RV or Nuke: it's the quick "double-click and check" tool.
+https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest. Not trying to replace RV or Nuke: it's the quick "double-click and check" tool.
 Bug reports and feature requests welcome.
 
 ---
@@ -77,7 +77,7 @@ as free software for the 3D and VFX community.
 Double-click any frame of a render and the whole sequence plays, with ACES 2.0 or AgX color management.
 Click a jewel in the viewer to isolate it with Cryptomatte and export a ProRes 4444 movie with alpha, ready for the edit.
 
-Free, also for commercial use. Download: [DOWNLOAD URL]
+Free, also for commercial use. Download: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest
 
 #3D #VFX #ACES #OpenEXR #Cryptomatte #ProductVisualization #Octane #Blender #Cinema4D
 
@@ -89,7 +89,7 @@ come software gratuito per la community 3D e VFX.
 Doppio clic su un frame qualsiasi del render e parte l'intera sequenza, con gestione colore ACES 2.0 o AgX.
 Clic su un gioiello nel viewer per isolarlo con Cryptomatte ed esportare un filmato ProRes 4444 con alpha, pronto per il montaggio.
 
-Gratuito anche per uso commerciale. Download: [DOWNLOAD URL]
+Gratuito anche per uso commerciale. Download: https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest
 
 #3D #VFX #ACES #Cryptomatte #ProductVisualization #Octane #Blender #Cinema4D
 
