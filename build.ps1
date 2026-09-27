@@ -23,7 +23,8 @@ $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.
 $cmake = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 if (-not (Test-Path $cmake)) { $cmake = "cmake" }
 $major = (& $vswhere -latest -products * -property catalog_productLineVersion)
-$gen = switch ($major) { "2026" { "Visual Studio 18 2026" } "2022" { "Visual Studio 17 2022" } default { "Visual Studio 17 2022" } }
+# vswhere reports the product line as "2026" or as the major version "18", depending on its version.
+$gen = switch ($major) { { $_ -in "2026", "18" } { "Visual Studio 18 2026" } { $_ -in "2022", "17" } { "Visual Studio 17 2022" } default { "Visual Studio 17 2022" } }
 
 & $cmake -S $root -B "$root\build" -G $gen -A x64 "-DCMAKE_TOOLCHAIN_FILE=$vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
 if ($LASTEXITCODE) { throw "CMake configure failed" }
