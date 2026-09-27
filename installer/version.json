@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
-  "notes_en": "Cryptomatte from a separate sequence (Octane), In/Out buttons, bundled FFmpeg, portable version. Now open source (MIT).",
-  "notes_it": "Cryptomatte da una sequenza separata (Octane), pulsanti In/Out, FFmpeg incluso, versione portable. Ora open source (MIT)."
+  "notes_en": "AOV stack: composite render passes (multi-layer EXR or separate pass sequences) with blend modes, per-layer color space and exposure, exported as viewed. Playback resolution 1:2 / 1:4 and smoother 4K playback.",
+  "notes_it": "Stack AOV: componi i pass di render (EXR multilayer o sequenze separate) con modalità di fusione, spazio colore ed esposizione per layer, esportati come li vedi. Risoluzione di riproduzione 1:2 / 1:4 e riproduzione 4K più fluida."
 }
