@@ -32,7 +32,7 @@ void App::applyLoadOptions()
         if (m_matteSeq) o->cryptoFiles = m_matteFiles;
     }
     m_loadOpts = o;
-    m_cache.setLoadOptions(o);
+    applyLoadPlan();
     if (!o->cryptoActive()) m_viewer.setMatteMode(MatteMode::Off);
 }
 
@@ -61,12 +61,12 @@ void App::toggleCryptoId(uint32_t id)
 
 void App::pickCrypto()
 {
-    if (!m_seq || !m_shown || !m_loadOpts || !m_loadOpts->cryptoActive()) return;
+    if (!m_seq || !m_shown || !m_loadOpts || !m_loadOpts->cryptoActive() || stackActive()) return;
     std::wstring file = m_seq->frames[m_index].path;
     if (m_loadOpts->cryptoFiles) file = m_index < (int)m_loadOpts->cryptoFiles->size() ? (*m_loadOpts->cryptoFiles)[m_index] : L"";
     uint32_t id = 0;
     float cov = 0;
-    if (!PickCryptoId(file, *m_loadOpts, m_hoverX, m_hoverY, m_shown->width, m_shown->height, id, cov)) {
+    if (!PickCryptoId(file, *m_loadOpts, m_hoverX, m_hoverY, m_shown->fullWidth(), m_shown->fullHeight(), id, cov)) {
         m_lastPick = "-";
         return;
     }
@@ -261,17 +261,7 @@ void App::loadMatteSequence(const std::wstring& path)
     m_matteSeq = std::make_shared<Sequence>(std::move(seq));
     m_matteInfo = std::move(info);
 
-    // Match frames by number; sequences with unrelated numbering are matched by position.
-    auto files = std::make_shared<std::vector<std::wstring>>(m_seq->count());
-    int hits = 0;
-    for (int i = 0; i < m_seq->count(); ++i) {
-        const int number = m_seq->frames[i].number;
-        auto it = std::lower_bound(m_matteSeq->frames.begin(), m_matteSeq->frames.end(), number,
-                                   [](const SequenceFrame& f, int n) { return f.number < n; });
-        if (it != m_matteSeq->frames.end() && it->number == number) { (*files)[i] = it->path; ++hits; }
-    }
-    if (hits == 0)
-        for (int i = 0; i < m_seq->count() && i < m_matteSeq->count(); ++i) (*files)[i] = m_matteSeq->frames[i].path;
+    auto files = std::make_shared<std::vector<std::wstring>>(MatchFrames(*m_seq, *m_matteSeq));
     m_matteMissing = (int)std::count(files->begin(), files->end(), std::wstring());
     m_matteFiles = files;
 
@@ -280,6 +270,7 @@ void App::loadMatteSequence(const std::wstring& path)
     m_lastPick.clear();
     if (m_matte == MatteMode::Off) m_matte = MatteMode::Ids;
     m_cryptoPanel = true;
+    m_stackPanel = false;
     applyLoadOptions();
     showToast(std::string(tr(S::MatteLoaded)) + ": " + ToUtf8(m_matteSeq->displayName()), m_matteMissing > 0);
 }

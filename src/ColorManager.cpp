@@ -215,12 +215,32 @@ std::string ColorManager::defaultView(const std::string& d) const
     return v ? v : std::string();
 }
 
-OCIO::ConstGPUProcessorRcPtr ColorManager::buildGpuProcessor()
+std::string ColorManager::workingSpace() const
+{
+    if (!m_config || !m_config->hasRole(OCIO::ROLE_SCENE_LINEAR)) return {};
+    auto cs = m_config->getColorSpace(OCIO::ROLE_SCENE_LINEAR);
+    return cs ? cs->getName() : std::string();
+}
+
+OCIO::ConstGPUProcessorRcPtr ColorManager::buildConversion(const std::string& src, const std::string& dst)
+{
+    if (!m_config) return nullptr;
+    try {
+        auto proc = m_config->getProcessor(src.c_str(), dst.c_str());
+        m_error.clear();
+        return proc->getOptimizedGPUProcessor(OCIO::OPTIMIZATION_DEFAULT);
+    } catch (const std::exception& e) {
+        m_error = e.what();
+        return nullptr;
+    }
+}
+
+OCIO::ConstGPUProcessorRcPtr ColorManager::buildGpuProcessor(const std::string& src)
 {
     if (!m_config) return nullptr;
     if (agxLook() != AgxLook::None) {
         try {
-            auto proc = m_config->getProcessor(buildAgxTransform(agxLook()));
+            auto proc = m_config->getProcessor(buildAgxTransform(agxLook(), src));
             m_error.clear();
             return proc->getOptimizedGPUProcessor(OCIO::OPTIMIZATION_DEFAULT);
         } catch (const std::exception& e) {
@@ -230,7 +250,7 @@ OCIO::ConstGPUProcessorRcPtr ColorManager::buildGpuProcessor()
     }
     try {
         auto dvt = OCIO::DisplayViewTransform::Create();
-        dvt->setSrc(input.c_str());
+        dvt->setSrc(src.c_str());
         dvt->setDisplay(display.c_str());
         dvt->setView(view.c_str());
 

@@ -29,3 +29,7 @@ std::vector<Sequence> FindSequences(const std::wstring& root, bool recursive);
 
 // Base name for outputs: "shot_v001.####.exr" -> "shot_v001".
 std::wstring SequenceBaseName(const Sequence& seq);
+
+// The file of `other` for each frame of `seq` ("" = none), matched by frame number;
+// sequences with unrelated numbering are matched by position.
+std::vector<std::wstring> MatchFrames(const Sequence& seq, const Sequence& other);

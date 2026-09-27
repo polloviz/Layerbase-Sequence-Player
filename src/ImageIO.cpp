@@ -445,6 +445,65 @@ ImagePtr LoadImageFile(const std::wstring& path, const LoadOptions* opt, const s
     }
 }
 
+namespace {
+
+template <class T, class ToFloat, class FromFloat>
+void BoxDownscale(const Image& src, Image& dst, int factor, ToFloat toFloat, FromFloat fromFloat)
+{
+    const T* in = reinterpret_cast<const T*>(src.data.data());
+    T* out = reinterpret_cast<T*>(dst.data.data());
+    const size_t rowIn = size_t(src.width) * 4, rowOut = size_t(dst.width) * 4;
+    std::vector<float> acc(rowOut);
+    for (int oy = 0; oy < dst.height; ++oy) {
+        std::fill(acc.begin(), acc.end(), 0.0f);
+        const int y0 = oy * factor, y1 = std::min(src.height, y0 + factor);
+        for (int y = y0; y < y1; ++y) {
+            const T* p = in + size_t(y) * rowIn;
+            for (int ox = 0; ox < dst.width; ++ox) {
+                float* a = &acc[size_t(ox) * 4];
+                for (int x = ox * factor, x1 = std::min(src.width, x + factor); x < x1; ++x, p += 4) {
+                    a[0] += toFloat(p[0]); a[1] += toFloat(p[1]); a[2] += toFloat(p[2]); a[3] += toFloat(p[3]);
+                }
+            }
+        }
+        T* q = out + size_t(oy) * rowOut;
+        for (int ox = 0; ox < dst.width; ++ox) {
+            const float n = float((y1 - y0) * (std::min(src.width, (ox + 1) * factor) - ox * factor));
+            for (int c = 0; c < 4; ++c) q[ox * 4 + c] = fromFloat(acc[size_t(ox) * 4 + c] / n);
+        }
+    }
+}
+
+}  // namespace
+
+ImagePtr Downscale(const ImagePtr& img, int factor)
+{
+    if (!img || !img->valid() || factor <= 1) return img;
+    auto out = std::make_shared<Image>();
+    out->width = (img->width + factor - 1) / factor;
+    out->height = (img->height + factor - 1) / factor;
+    out->type = img->type;
+    out->hasAlpha = img->hasAlpha;
+    out->description = img->description;
+    out->fullW = img->fullWidth();
+    out->fullH = img->fullHeight();
+    out->data.resize(size_t(out->width) * out->height * 4 * BytesPerChannel(img->type));
+    switch (img->type) {
+    case PixelType::U8:
+        BoxDownscale<uint8_t>(*img, *out, factor, [](uint8_t v) { return float(v); },
+                              [](float v) { return uint8_t(v + 0.5f); });
+        break;
+    case PixelType::U16:
+        BoxDownscale<uint16_t>(*img, *out, factor, [](uint16_t v) { return float(v); },
+                               [](float v) { return uint16_t(v + 0.5f); });
+        break;
+    case PixelType::F16:
+        BoxDownscale<half>(*img, *out, factor, [](half v) { return float(v); }, [](float v) { return half(v); });
+        break;
+    }
+    return out;
+}
+
 bool SamplePixel(const Image& img, int x, int y, float out[4])
 {
     if (!img.valid() || x < 0 || y < 0 || x >= img.width || y >= img.height) return false;

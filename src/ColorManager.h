@@ -64,11 +64,18 @@ public:
     std::string input, display, view, look;   // look empty = config default for the view
 
     // Builds the GPU processor for current selection. Returns null on error (see error()).
-    OCIO::ConstGPUProcessorRcPtr buildGpuProcessor();
+    OCIO::ConstGPUProcessorRcPtr buildGpuProcessor() { return buildGpuProcessor(input); }
+    // Same display/view/look from another source space (the working space of a composite).
+    OCIO::ConstGPUProcessorRcPtr buildGpuProcessor(const std::string& src);
+
+    // Scene-linear working space (role scene_linear); empty when the config has none.
+    std::string workingSpace() const;
+    // Plain color space conversion, for the layers of a composite. Null on error.
+    OCIO::ConstGPUProcessorRcPtr buildConversion(const std::string& src, const std::string& dst);
 
 private:
     void rebuildLists();
-    OCIO::GroupTransformRcPtr buildAgxTransform(AgxLook look);
+    OCIO::GroupTransformRcPtr buildAgxTransform(AgxLook look, const std::string& src);
 
     OCIO::ConstConfigRcPtr m_config;
     std::string m_source;

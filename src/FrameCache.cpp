@@ -1,8 +1,89 @@
 #include "FrameCache.h"
 #include "ImageIO.h"
+#include "Platform.h"
 
 #include <algorithm>
 #include <windows.h>
+
+bool FrameSet::complete() const
+{
+    return std::all_of(images.begin(), images.end(), [](const ImagePtr& i) { return i != nullptr; });
+}
+
+ImagePtr FrameSet::find(const std::string& key) const
+{
+    for (size_t i = 0; i < images.size() && plan && i < plan->layers.size(); ++i)
+        if (plan->layers[i].key == key) return images[i];
+    return nullptr;
+}
+
+namespace {
+
+size_t SetBytes(const std::vector<ImagePtr>& images)
+{
+    size_t n = 0;
+    for (auto& i : images)
+        if (i) n += i->memorySize();
+    return n;
+}
+
+bool AllValid(const std::vector<ImagePtr>& images)
+{
+    return std::all_of(images.begin(), images.end(), [](const ImagePtr& i) { return i && i->valid(); });
+}
+
+ImagePtr MissingFrame()
+{
+    static const ImagePtr img = [] {
+        auto i = std::make_shared<Image>();
+        i->error = "Missing frame";
+        return i;
+    }();
+    return img;
+}
+
+// Decodes the layers of frame `index` that are still null. Layers read from the same
+// EXR file are decoded together, so the file is opened and decompressed once.
+void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vector<ImagePtr>& images)
+{
+    std::vector<std::pair<std::wstring, std::vector<size_t>>> byFile;   // first-use order
+    for (size_t k = 0; k < plan.layers.size(); ++k) {
+        if (images[k]) continue;
+        const LayerLoad& l = plan.layers[k];
+        const std::wstring path = !l.files ? seq.frames[index].path
+                                : index < (int)l.files->size() ? (*l.files)[index] : std::wstring();
+        if (path.empty()) {
+            images[k] = MissingFrame();
+            continue;
+        }
+        auto it = std::find_if(byFile.begin(), byFile.end(), [&](auto& f) { return f.first == path; });
+        if (it == byFile.end()) byFile.push_back({ path, { k } });
+        else it->second.push_back(k);
+    }
+    static const LoadOptions kDefault;
+    for (const auto& [path, layers] : byFile) {
+        bool together = layers.size() > 1 && GetFileExtension(path) == L".exr";
+        for (size_t k : layers) together = together && !(plan.layers[k].opts && plan.layers[k].opts->cryptoActive());
+        if (together) {
+            std::vector<const LoadOptions*> opts;
+            for (size_t k : layers) opts.push_back(plan.layers[k].opts ? plan.layers[k].opts.get() : &kDefault);
+            std::vector<ImagePtr> imgs = LoadExrLayers(path, opts);
+            for (size_t j = 0; j < layers.size(); ++j) images[layers[j]] = imgs[j];
+            continue;
+        }
+        for (size_t k : layers) {
+            const LoadOptions* o = plan.layers[k].opts.get();
+            std::wstring matte;
+            if (o && o->cryptoFiles && index < (int)o->cryptoFiles->size()) matte = (*o->cryptoFiles)[index];
+            images[k] = LoadImageFile(path, o, matte);
+        }
+    }
+    if (plan.proxy > 1)
+        for (const auto& [path, layers] : byFile)
+            for (size_t k : layers) images[k] = Downscale(images[k], plan.proxy);
+}
+
+}  // namespace
 
 FrameCache::FrameCache()
 {
@@ -59,15 +140,43 @@ void FrameCache::clear()
     m_cv.notify_all();
 }
 
-void FrameCache::setLoadOptions(LoadOptionsPtr opts)
+void FrameCache::setPlan(LoadPlanPtr plan)
 {
     {
         std::lock_guard lock(m_mutex);
-        m_opts = std::move(opts);
+        const LoadPlanPtr old = std::move(m_plan);
+        m_plan = std::move(plan);
         ++m_generation;
-        m_frames.clear();
         m_inflight.clear();
+        m_frameEstimate = 0;
+
+        // New layer index -> old layer index with the same key (and the same resolution).
+        const size_t n = m_plan ? m_plan->layers.size() : 0;
+        std::vector<int> from(n, -1);
+        bool keep = false;
+        for (size_t k = 0; k < n && old && old->proxy == m_plan->proxy; ++k)
+            for (size_t j = 0; j < old->layers.size(); ++j)
+                if (old->layers[j].key == m_plan->layers[k].key) { from[k] = (int)j; keep = true; break; }
+
         m_used = 0;
+        if (!keep) {
+            m_frames.clear();
+        } else {
+            for (auto it = m_frames.begin(); it != m_frames.end();) {
+                auto set = std::make_shared<FrameSet>();
+                set->plan = m_plan;
+                set->images.resize(n);
+                bool any = false;
+                for (size_t k = 0; k < n; ++k)
+                    if (from[k] >= 0 && (set->images[k] = it->second->images[from[k]])) any = true;
+                if (!any) { it = m_frames.erase(it); continue; }
+                set->bytes = SetBytes(set->images);
+                if (AllValid(set->images)) m_frameEstimate = std::max(m_frameEstimate, set->bytes);
+                m_used += set->bytes;
+                it->second = std::move(set);
+                ++it;
+            }
+        }
     }
     m_cv.notify_all();
 }
@@ -97,19 +206,19 @@ void FrameCache::setPlayhead(int index, int direction, int rangeStart, int range
     m_cv.notify_all();
 }
 
-ImagePtr FrameCache::get(int index) const
+FrameSetPtr FrameCache::get(int index) const
 {
     std::lock_guard lock(m_mutex);
     auto it = m_frames.find(index);
-    return it == m_frames.end() ? nullptr : it->second;
+    return it == m_frames.end() || !it->second->complete() ? nullptr : it->second;
 }
 
 void FrameCache::stateMask(std::vector<uint8_t>& out) const
 {
     std::lock_guard lock(m_mutex);
     out.assign(m_seq ? m_seq->count() : 0, 0);
-    for (auto& [i, img] : m_frames)
-        if (i >= 0 && i < (int)out.size()) out[i] = img->valid() ? 1 : 2;
+    for (auto& [i, set] : m_frames)
+        if (i >= 0 && i < (int)out.size() && set->complete()) out[i] = AllValid(set->images) ? 1 : 2;
 }
 
 size_t FrameCache::usedBytes() const
@@ -133,7 +242,7 @@ size_t FrameCache::distance(int index) const
 
 bool FrameCache::pickWork(int& index, uint64_t& gen)
 {
-    if (!m_seq || m_seq->empty()) return false;
+    if (!m_seq || m_seq->empty() || !m_plan) return false;
     const int len = m_rangeEnd - m_rangeStart + 1;
     const size_t need = m_frameEstimate;
 
@@ -143,7 +252,9 @@ bool FrameCache::pickWork(int& index, uint64_t& gen)
             if (!m_wrap) break;
             i = m_rangeStart + ((i - m_rangeStart) % len + len) % len;
         }
-        if (m_frames.count(i) || m_inflight.count(i)) continue;
+        if (m_inflight.count(i)) continue;
+        auto cached = m_frames.find(i);
+        if (cached != m_frames.end() && cached->second->complete()) continue;
 
         // Make room: evict frames that are farther away than this one.
         const size_t reserved = need * m_inflight.size();
@@ -156,7 +267,7 @@ bool FrameCache::pickWork(int& index, uint64_t& gen)
                 if (d > worst) { worst = d; victim = it; }
             }
             if (victim == m_frames.end()) return false;   // cache full of closer frames
-            m_used -= victim->second->memorySize();
+            m_used -= victim->second->bytes;
             m_frames.erase(victim);
         }
         index = i;
@@ -177,20 +288,26 @@ void FrameCache::workerLoop()
             m_cv.wait(lock);
             continue;
         }
-        const std::wstring path = m_seq->frames[index].path;
-        const LoadOptionsPtr opts = m_opts;
+        const std::shared_ptr<const Sequence> seq = m_seq;
+        const LoadPlanPtr plan = m_plan;
+        std::vector<ImagePtr> images(plan->layers.size());
+        if (auto it = m_frames.find(index); it != m_frames.end()) images = it->second->images;   // decode only what is missing
         lock.unlock();
 
-        std::wstring matte;
-        if (opts && opts->cryptoFiles && index < (int)opts->cryptoFiles->size()) matte = (*opts->cryptoFiles)[index];
-        ImagePtr img = LoadImageFile(path, opts.get(), matte);
+        DecodeLayers(*seq, index, *plan, images);
 
         lock.lock();
-        if (gen != m_generation) continue;   // sequence changed meanwhile
+        if (gen != m_generation) continue;   // sequence or plan changed meanwhile
         m_inflight.erase(index);
-        m_frames[index] = img;
-        m_used += img->memorySize();
-        if (img->valid()) m_frameEstimate = std::max(m_frameEstimate, img->memorySize());
+        auto set = std::make_shared<FrameSet>();
+        set->plan = plan;
+        set->bytes = SetBytes(images);
+        set->images = std::move(images);
+        FrameSetPtr& slot = m_frames[index];
+        if (slot) m_used -= slot->bytes;
+        m_used += set->bytes;
+        if (AllValid(set->images)) m_frameEstimate = std::max(m_frameEstimate, set->bytes);
+        slot = std::move(set);
         auto cb = m_onFrameReady;
         lock.unlock();
         if (cb) cb();

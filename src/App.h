@@ -26,9 +26,30 @@ struct StartupOptions {
     std::wstring matteSeq;                                  // external Cryptomatte sequence
     std::wstring batchRoot, batchOutDir;                    // --batch: convert all sequences, then quit
     bool overwrite = false;
+    int proxy = 1;                        // playback resolution divisor (2 = half, 4 = quarter)
 };
 
 enum class LoopMode : int { Loop = 0, Once = 1, PingPong = 2 };
+
+// A layer of the AOV stack: an EXR layer (or the whole image) of the opened sequence or
+// of another sequence holding one pass, matched frame by frame.
+struct StackLayer {
+    int id = 0;                                              // stable ImGui id
+    std::string name;
+    std::string key;                                         // what is decoded (LayerLoad::key)
+    std::shared_ptr<const Sequence> seq;                     // other sequence; null = the opened one
+    std::shared_ptr<const std::vector<std::wstring>> files;  // its file per frame of the opened one
+    int missing = 0;                                         // frames of the opened sequence without a file
+    std::shared_ptr<const std::vector<ExrLayer>> exrLayers;  // layers of the source (null = not EXR)
+    int exrLayer = -1;
+    bool isFloat = true;                                     // EXR / HDR source
+    std::string input;                                       // OCIO input color space
+    bool inputAuto = true;
+    BlendMode blend = BlendMode::Normal;
+    float opacity = 1.0f;
+    float exposure = 0.0f;                                   // stops
+    bool visible = true;
+};
 
 class App {
 public:
@@ -90,6 +111,29 @@ private:
     bool hasCrypto() const { return !cryptoLayers().empty(); }
     std::string currentLayerLabel() const;
 
+    // AOV stack (StackUI.cpp)
+    bool stackActive() const { return !m_stack.empty(); }
+    void applyLoadPlan();                                    // what the cache decodes: the view or the stack layers
+    void showFrame(const FrameSetPtr& set);
+    ImagePtr baseImage(const FrameSetPtr& set) const;        // sets the canvas: the lowest stack layer with pixels
+    std::vector<CompLayer> compLayers(const FrameSetPtr& set) const;
+    std::string autoInput(bool isFloat, const std::wstring& path) const;
+    void stackBegin();
+    void stackAddOwn(int exrLayer);
+    void stackAddOther(const StackLayer& source, int exrLayer);
+    void stackAddSequences(const std::vector<std::wstring>& paths);
+    void stackPush(StackLayer layer);
+    void stackRemove(int index);
+    void stackMove(int from, int to);
+    void stackClear();
+    void stackSetExrLayer(int index, int exrLayer);
+    void stackSetInput(int index, const std::string& name);  // "" = automatic
+    void stackRefreshInputs();                               // after a config change
+    void stackAddDialog();
+    void stackTestSetup();
+    void drawStackPanel(float x, float y, float w, float h);
+    void drawStackAddMenu();
+
     // UI (UI.cpp)
     void drawUI();
     void drawTopBar();
@@ -102,7 +146,8 @@ private:
     void drawSettings();
     void drawAbout();
     void drawConfigCombo(float width);
-    bool drawColorSpaceCombo(const char* id, float width);
+    // Returns true when the user picks a space (`picked`, "" = automatic).
+    bool drawColorSpaceCombo(const char* id, float width, const std::string& current, bool isAuto, std::string& picked);
     void drawDisplayViewCombos(float wDisplay, float wView, float wLook);
 
     // Batch conversion (BatchUI.cpp)
@@ -168,9 +213,11 @@ private:
     double m_nextTick = 0.0;
     double m_lastFrameTime = 0.0;
     double m_actualFps = 0.0;
-    ImagePtr m_shown;
+    ImagePtr m_shown;                 // the image, or the canvas-setting layer of the stack
+    FrameSetPtr m_shownSet;
     std::vector<uint8_t> m_cacheMask;
     double m_lastMaskUpdate = 0.0;
+    double m_viewerMsMax = 0.0;       // slowest viewer update + draw since the last playback log
 
     // view
     bool m_fit = true;
@@ -208,6 +255,17 @@ private:
     ExrInfo m_matteInfo;
     std::shared_ptr<const std::vector<std::wstring>> m_matteFiles;   // per frame of m_seq, "" = missing
     int m_matteMissing = 0;
+    int m_viewSerial = 0;                 // key of the single-view decode plan
+    int m_proxy = 1;                      // playback resolution chosen by the user: 1, 2 (half) or 4 (quarter)
+    int m_planProxy = 1;                  // resolution being decoded: full while exporting
+
+    // AOV stack: layers bottom to top, blended in the working space; empty = single view
+    std::vector<StackLayer> m_stack;
+    int m_stackSel = 0;
+    int m_stackNextId = 1;
+    bool m_stackPanel = false;
+    std::vector<std::string> m_stackInputs;   // input spaces with a GPU transform (CompLayer::transform)
+    std::string m_hoverLayer;                 // pixel inspector source in the stack
 
     // batch
     struct BatchItem {

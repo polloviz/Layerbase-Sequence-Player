@@ -60,6 +60,10 @@ using LoadOptionsPtr = std::shared_ptr<const LoadOptions>;
 // Layer and/or Cryptomatte of the frame itself.
 ImagePtr LoadExrWithOptions(const std::wstring& path, const LoadOptions& opt);
 
+// Several layers of one frame (Cryptomatte options ignored), read in one pass per part so
+// each compressed block is decompressed once. Result is aligned with `opts`.
+std::vector<ImagePtr> LoadExrLayers(const std::wstring& path, const std::vector<const LoadOptions*>& opts);
+
 // Writes the mask of an external Cryptomatte file into a decoded frame of any format
 // (result is half RGBA). A matte with a different resolution is scaled to fit.
 ImagePtr ApplyExternalCrypto(const ImagePtr& frame, const std::wstring& mattePath, const LoadOptions& opt);

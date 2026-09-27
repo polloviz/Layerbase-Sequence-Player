@@ -172,6 +172,37 @@ enum class Lang { English = 0, Italian = 1 };
     X(ExportFailed,      "Export failed",                         "Esportazione non riuscita") \
     X(Remaining,         "remaining",                             "rimanenti") \
     X(ShowInFolder,      "Show in folder",                        "Mostra nella cartella") \
+    X(Stack,             "Stack",                                 "Stack") \
+    X(StackTitle,        "AOV stack",                             "Stack AOV") \
+    X(StackIntro,        "Composite AOVs of this sequence or of other sequences (one per pass): add layers, then set their order and how they blend.", \
+                                                                  "Componi gli AOV di questa sequenza o di altre sequenze (una per pass): aggiungi i layer, poi scegli ordine e fusione.") \
+    X(StackHint,         "Drag layers to reorder them. Upper layers blend over lower ones in the scene-linear working space; the view is applied once, to the result. Sequences dropped on the window while this panel is open become layers.", \
+                                                                  "Trascina i layer per riordinarli. I layer in alto si fondono su quelli sotto nello spazio di lavoro lineare; la vista si applica una volta sola, al risultato. Le sequenze trascinate sulla finestra con questo pannello aperto diventano layer.") \
+    X(AddLayer,          "Add layer",                             "Aggiungi layer") \
+    X(AddPassSequences,  "Sequences with one pass each...",       "Sequenze con un pass ciascuna...") \
+    X(Blend,             "Blend",                                 "Fusione") \
+    X(BlendNormal,       "Normal",                                "Normale") \
+    X(BlendAdd,          "Add",                                   "Somma") \
+    X(BlendSubtract,     "Subtract",                              "Sottrai") \
+    X(BlendMultiply,     "Multiply",                              "Moltiplica") \
+    X(BlendScreen,       "Screen",                                "Scolora") \
+    X(ScreenHint,        "Screen expects values between 0 and 1: with HDR values above 1 the result is not correct.", \
+                                                                  "Scolora presuppone valori tra 0 e 1: con valori HDR sopra 1 il risultato non è corretto.") \
+    X(Opacity,           "Opacity",                               "Opacità") \
+    X(Source,            "Source",                                "Origine") \
+    X(Visible,           "Visible",                               "Visibile") \
+    X(MoveUp,            "Move up",                               "Sposta su") \
+    X(MoveDown,          "Move down",                             "Sposta giù") \
+    X(RemoveLayer,       "Remove",                                "Rimuovi") \
+    X(CloseStack,        "Close stack",                           "Chiudi stack") \
+    X(FramesMissing,     "frames missing",                        "frame mancanti") \
+    X(NotASequence,      "Not an image sequence:",                "Non è una sequenza di immagini:") \
+    X(StackNoCrypto,     "Not available with the AOV stack",      "Non disponibile con lo stack AOV") \
+    X(Resolution,        "Playback resolution: lower uses less memory and reaches the GPU faster. Export always reads full resolution.", \
+                                                                  "Risoluzione di riproduzione: più bassa usa meno memoria e arriva prima alla GPU. L'export legge sempre a risoluzione piena.") \
+    X(ResFull,           "full",                                  "piena") \
+    X(ResHalf,           "half",                                  "metà") \
+    X(ResQuarter,        "quarter",                               "un quarto") \
     X(AgxTooltip,        "AgX view transform (Blender formulation), works with any config. SDR: sRGB, Rec.1886 or Display P3 from the selected display.", \
                                                                   "Vista AgX (formulazione Blender), funziona con qualsiasi config. SDR: sRGB, Rec.1886 o Display P3 in base al display scelto.")
 

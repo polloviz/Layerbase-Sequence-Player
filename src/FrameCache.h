@@ -12,6 +12,30 @@
 #include <unordered_map>
 #include <vector>
 
+// One layer decoded for every frame: which file and which EXR channels.
+struct LayerLoad {
+    std::string key;   // identity of the decoded pixels: layers with the same key are interchangeable
+    // File per frame of the sequence ("" = none for that frame); null = the sequence's own frames.
+    std::shared_ptr<const std::vector<std::wstring>> files;
+    LoadOptionsPtr opts;
+};
+struct LoadPlan {
+    std::vector<LayerLoad> layers;
+    int proxy = 1;     // decode at 1/proxy of the file resolution (playback proxy)
+};
+using LoadPlanPtr = std::shared_ptr<const LoadPlan>;
+
+// The decoded layers of one frame, aligned with plan->layers (null = not decoded yet).
+struct FrameSet {
+    LoadPlanPtr plan;
+    std::vector<ImagePtr> images;
+    size_t bytes = 0;
+
+    bool complete() const;
+    ImagePtr find(const std::string& key) const;
+};
+using FrameSetPtr = std::shared_ptr<const FrameSet>;
+
 // Background multi-threaded frame decoder with a memory-bounded cache.
 // Frames are decoded in "look-ahead order" starting at the playhead in the
 // play direction; when the budget is exhausted, frames farthest away in that
@@ -23,12 +47,13 @@ public:
 
     void setSequence(std::shared_ptr<const Sequence> seq);
     void setBudget(size_t bytes);
-    // Changes what is decoded (EXR layer, Cryptomatte); drops cached frames.
-    void setLoadOptions(LoadOptionsPtr opts);
+    // Changes what is decoded. Layers whose key is still planned are kept, so adding a
+    // layer decodes only that layer.
+    void setPlan(LoadPlanPtr plan);
     void setPlayhead(int index, int direction, int rangeStart, int rangeEnd, bool wrap);
     void clear();
 
-    ImagePtr get(int index) const;
+    FrameSetPtr get(int index) const;   // frames with every layer decoded, else null
     // 0 = not cached, 1 = cached, 2 = error
     void stateMask(std::vector<uint8_t>& out) const;
     size_t usedBytes() const;
@@ -47,10 +72,10 @@ private:
     bool m_quit = false;
 
     std::function<void()> m_onFrameReady;
-    LoadOptionsPtr m_opts;
+    LoadPlanPtr m_plan;
     std::shared_ptr<const Sequence> m_seq;
     uint64_t m_generation = 0;
-    std::unordered_map<int, ImagePtr> m_frames;
+    std::unordered_map<int, FrameSetPtr> m_frames;
     std::set<int> m_inflight;
     size_t m_used = 0;
     size_t m_budget = size_t(4) << 30;

@@ -61,6 +61,9 @@ and without color mistakes in your previews.
 - Loop, play once, ping-pong, reverse playback, frame-by-frame stepping.
 - **In/Out points** with the buttons next to the playback controls (or I / O). Clear them by clicking the In/Out label or pressing U.
 - Zoom around the cursor with the mouse wheel, pan, fit/100%, fullscreen, hideable interface (Tab).
+- **Playback resolution** 1:1, 1:2 or 1:4: heavy 4K+ renders and AOV stacks use 4 or 16 times less memory and play smoothly,
+  while export always uses full resolution.
+- Frames are sent to the graphics card in the background while the previous one is on screen, so large renders stay smooth.
 - R, G, B, A and luminance channels. The pixel inspector shows the actual float values under the cursor.
 
 ## 5. Multi-layer EXR
@@ -70,6 +73,20 @@ and without color mistakes in your previews.
 - The selected layer stays active when you open another shot that contains it.
 
 **Why it helps:** you can check individual render passes without exporting them separately.
+
+### AOV stack
+
+- The **Stack** button opens a panel where you combine AOVs: passes of the open multi-layer EXR, or separate
+  sequences with one pass each (select several at once, or drop them on the window while the panel is open).
+- For each layer: visibility, input color space, **blend mode** (Normal, Add, Subtract, Multiply, Screen), opacity and exposure.
+  Drag layers to change their order.
+- Layers are blended in the scene-linear working space of the config, then the view (ACES, AgX…) is applied once:
+  the result matches a compositing app, and it is what movie export writes.
+- Passes stored in the same EXR are read in a single pass, and the stack costs nothing until you use it:
+  opening a sequence stays just as fast.
+
+**Why it helps:** you can rebuild the beauty from its passes, tweak each light or pass with its own exposure, and export
+the result, without opening compositing software.
 
 ## 6. Cryptomatte
 
@@ -94,7 +111,7 @@ without going through compositing.
 
 - **H.264** and **H.265** (MP4), including NVIDIA NVENC hardware encoding.
 - **ProRes** 422 Proxy, LT, 422, HQ and **4444** with alpha (MOV).
-- Color is applied **exactly as you see it** on screen (config, view, look, exposure, gamma, layer, mask).
+- Color is applied **exactly as you see it** on screen (config, view, look, exposure, gamma, layer, mask, AOV stack).
 - H.265 and ProRes are encoded from 16-bit-per-channel data. Files are tagged with the correct primaries and transfer curve
   (sRGB, Rec.709, P3, Rec.2020, PQ), so players display them with the right colors.
 - Full range or In/Out only, 100/50/25% scale, frame rate of your choice.

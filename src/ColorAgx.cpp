@@ -111,22 +111,22 @@ bool ColorManager::isBuiltinView(const std::string& v) const
     return std::find(names.begin(), names.end(), v) != names.end();
 }
 
-OCIO::GroupTransformRcPtr ColorManager::buildAgxTransform(AgxLook look)
+OCIO::GroupTransformRcPtr ColorManager::buildAgxTransform(AgxLook look, const std::string& src)
 {
     auto group = OCIO::GroupTransform::Create();
 
-    // 1. Input -> scene-linear Rec.2020.
+    // 1. Source -> scene-linear Rec.2020.
     OCIO::ConstProcessorRcPtr toRec2020;
     for (const char* n : { "Linear Rec.2020", "lin_rec2020", "Utility - Linear - Rec.2020", "lin_rec2020_scene" })
         if (hasColorSpace(n)) {
-            toRec2020 = m_config->getProcessor(input.c_str(), n);
+            toRec2020 = m_config->getProcessor(src.c_str(), n);
             break;
         }
     if (!toRec2020) {
         // Through the interchange roles (aces_interchange / cie_xyz_d65_interchange).
         try {
             static const OCIO::ConstConfigRcPtr studio = OCIO::Config::CreateFromFile(DefaultBuiltinUri().c_str());
-            toRec2020 = OCIO::Config::GetProcessorFromConfigs(m_config, input.c_str(), studio, "Linear Rec.2020");
+            toRec2020 = OCIO::Config::GetProcessorFromConfigs(m_config, src.c_str(), studio, "Linear Rec.2020");
         } catch (const OCIO::Exception&) {
         }
     }
@@ -135,7 +135,7 @@ OCIO::GroupTransformRcPtr ColorManager::buildAgxTransform(AgxLook look)
     } else {
         // Last resort: assume the config's scene_linear is linear Rec.709.
         auto cst = OCIO::ColorSpaceTransform::Create();
-        cst->setSrc(input.c_str());
+        cst->setSrc(src.c_str());
         cst->setDst(OCIO::ROLE_SCENE_LINEAR);
         group->appendTransform(cst);
         group->appendTransform(Matrix3(kRec709ToRec2020));

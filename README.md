@@ -22,12 +22,14 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
   - Input (searchable, grouped by family), Display, View, Look, exposure (EV) and gamma;
   - automatic input: EXR/HDR → `scene_linear` (ACEScg), integer formats → sRGB; custom configs use their file rules. The last choice is remembered per config and per format class;
   - **OCIO** button to turn color management off.
-- **Playback:** default **30 fps** (presets 12–120 or custom), loop / once / ping-pong, In/Out points (buttons beside the transport, I/O keys; click the In/Out label to clear), reverse playback, actual fps shown while playing.
+- **Playback:** default **30 fps** (presets 12–120 or custom), loop / once / ping-pong, In/Out points (buttons beside the transport, I/O keys; click the In/Out label to clear), reverse playback, actual fps shown while playing. While playing, the next frame is sent to the GPU from a background thread, so large frames and AOV stacks do not stall the interface.
+- **Playback resolution:** the *1:1 / 1:2 / 1:4* menu (bottom bar, or `--proxy 2|4`) decodes frames at half or quarter size: 4× or 16× less cache memory and GPU traffic, useful for 4K+ renders and AOV stacks. The image keeps its size on screen, the pixel inspector shows file coordinates, and export always reads full resolution.
 - **Viewing:** fit/100%, wheel zoom around the cursor, pan, R/G/B/A/Luma channels, pixel inspector (float values under the cursor), fullscreen, hideable UI.
 - **Movie export (Ctrl+E):** H.264 and H.265 (MP4, x264/x265 or NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ and 4444 (MOV). Color is applied exactly as displayed (input → display/view, look, exposure, gamma, channel) on the GPU; H.265 and ProRes are fed 16 bits per channel. Files are tagged with the display primaries/transfer (sRGB, Rec.1886, P3, Rec.2020, PQ). Full range or In/Out, 100/50/25% scale, frame rate. **FFmpeg is included**; another build can be chosen in the export dialog (also searched in PATH, `C:\FFMPEG\bin`, winget, choco).
 - **Multi-layer EXR:** layers and multi-part files are listed in the *Layer* menu (bottom bar); the selected layer is shown and exported (XYZ vectors and single channels such as Z are shown as RGB / gray). The layer stays selected when opening another shot that contains it.
 - **Cryptomatte:** the *Cryptomatte* button (bottom bar) opens the panel: layer (CryptoObject/Material/Asset), *IDs* (colors per object), *Overlay*, *Masked* (only the selection, in scene-linear before the view), *Matte* (black and white mask). Select objects by clicking in the viewer or from the manifest list (searchable). The mask applies to playback and export; in ProRes 4444 it can become the alpha channel. Channel names are matched case-insensitively (Octane writes `.r/.g/.b/.a`). A Cryptomatte-only file opens in IDs mode.
   - **External Cryptomatte sequence:** with a sequence open, *Load Cryptomatte sequence…* (panel or menu) masks it with the Cryptomatte of another sequence (e.g. Octane's `cm-*` pass). Frames are matched by number (by position if the numbering differs); a different resolution is scaled. Works with a beauty in any format. Opening another shot removes the external matte, so it does not apply to batch conversion.
+- **AOV stack:** the *Stack* button (bottom bar) opens the panel. *Add layer* stacks AOVs of the open EXR, or other sequences holding one pass each (multi-select, or drop them on the window while the panel is open; frames are matched by number, a different resolution is stretched). Each layer has its own visibility, EXR layer, input color space, blend mode (*Normal*, *Add*, *Subtract*, *Multiply*, *Screen*), opacity and exposure; drag rows to reorder. Layers are converted to the config's scene-linear working space (`scene_linear` role), blended there on the GPU, and the view transform runs once on the result, for playback and export. Layers read from the same EXR are decoded in one pass; the stack costs nothing until it is used. Cryptomatte is not available while the stack is active; opening another shot closes the stack.
 - **Batch conversion (Ctrl+B):** add sequences (multi-select), a folder (with subfolders) or drop several files/folders on the window; every sequence found is converted with the same settings (format, quality, size, fps, layer, color). Output next to each sequence or into one folder, skipping existing files, with per-sequence status.
 - **Windows integration:** the installer registers the formats → the player appears in **"Open with"** and in **Default apps**; for extensions without an associated program (often `.exr`, `.dpx`) it becomes the default. Windows does not let programs make themselves the default for extensions that are already associated: *Set as default app…* (Settings) opens the right Windows page.
 - **Portable mode:** `portable.txt` next to the exe keeps settings in a `data` folder beside it, with nothing written to the registry.
@@ -56,7 +58,7 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 ## Command line
 
 ```
-SequencePlayer.exe [--fps 24] [--play] [--config C:\path\config.ocio | ocio://studio-config-latest]
+SequencePlayer.exe [--fps 24] [--play] [--proxy 2|4] [--config C:\path\config.ocio | ocio://studio-config-latest]
                    [--display "sRGB - Display"] [--view "ACES 2.0 - SDR 100 nits (Rec.709)"] [file or folder]
 SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha]
                    exports without interaction, then exits (exit code 0 = ok)
@@ -69,7 +71,7 @@ SequencePlayer.exe --register      registers the formats (per user, no admin)
 SequencePlayer.exe --unregister    removes the registration
 ```
 
-Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto` opens a dialog at startup; `SP_UPDATE_URL=<url>` uses another update manifest.
+Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack` opens a dialog at startup; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
 
 ## Building
 
@@ -110,7 +112,9 @@ Output in `dist\`:
 | `src/App.cpp` | Win32 window, OpenGL 4.1 context, main loop, playback, input |
 | `src/UI.cpp` | interface (color bar, timeline, transport, settings) |
 | `src/ColorManager.cpp` | OCIO configs, color space/display/view/look lists, processors |
-| `src/GLViewer.cpp` | OCIO-generated GLSL shader, LUT textures, image drawing |
+| `src/GLViewer.cpp` | OCIO-generated GLSL shader, LUT textures, image drawing, AOV stack compositing |
+| `src/TextureUploader.cpp` | background texture uploads on a shared GL context |
+| `src/StackUI.cpp` | AOV stack: layers, decode plan, panel |
 | `src/ColorAgx.cpp` | built-in AgX (native OCIO transforms), Blender config discovery |
 | `src/Export.cpp`, `src/ExportUI.cpp` | movie export through FFmpeg (pipe), dialog and progress |
 | `src/ExrLayers.cpp`, `src/CryptoUI.cpp` | multi-layer/multi-part EXR, Cryptomatte decoding, panel |

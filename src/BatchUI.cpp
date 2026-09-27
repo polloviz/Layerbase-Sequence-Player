@@ -117,8 +117,8 @@ void App::processBatch()
             return;
         }
         m_exportOpt = m_batchOpt;
-        m_exportOpt.width = m_shown->width;
-        m_exportOpt.height = m_shown->height;
+        m_exportOpt.width = m_shown->fullWidth();   // exports decode at full resolution
+        m_exportOpt.height = m_shown->fullHeight();
         m_exportOpt.outputPath = it.output;
         m_exportInOut = false;
         m_exportResultReady = false;

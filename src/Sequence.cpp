@@ -177,3 +177,18 @@ std::wstring SequenceBaseName(const Sequence& seq)
     }
     return base.empty() ? L"export" : base;
 }
+
+std::vector<std::wstring> MatchFrames(const Sequence& seq, const Sequence& other)
+{
+    std::vector<std::wstring> files(seq.frames.size());
+    bool hit = false;
+    for (size_t i = 0; i < seq.frames.size(); ++i) {
+        const int number = seq.frames[i].number;
+        auto it = std::lower_bound(other.frames.begin(), other.frames.end(), number,
+                                   [](const SequenceFrame& f, int n) { return f.number < n; });
+        if (it != other.frames.end() && it->number == number) { files[i] = it->path; hit = true; }
+    }
+    if (!hit)
+        for (size_t i = 0; i < seq.frames.size() && i < other.frames.size(); ++i) files[i] = other.frames[i].path;
+    return files;
+}

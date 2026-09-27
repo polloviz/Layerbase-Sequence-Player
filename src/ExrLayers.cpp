@@ -47,6 +47,15 @@ bool IsColorSuffix(const std::string& s)
     return l == "r" || l == "g" || l == "b" || l == "a" || l == "red" || l == "green" || l == "blue" || l == "alpha";
 }
 
+// Root R/G/B/A channels of a part: its default layer.
+std::vector<std::string> RootColorChannels(const Imf::Header& hdr)
+{
+    std::vector<std::string> out;
+    for (auto it = hdr.channels().begin(); it != hdr.channels().end(); ++it)
+        if (Prefix(it.name()).empty() && IsColorSuffix(it.name())) out.push_back(it.name());
+    return out;
+}
+
 // Maps a layer's channels onto R, G, B, A slots. Single-channel layers become gray.
 void MapChannels(const std::vector<std::string>& channels, std::string out[4], bool& gray)
 {
@@ -288,47 +297,84 @@ ExrInfo ReadExrInfo(const std::wstring& path)
 
 namespace {
 
-// Reads up to 4 channels of one part as half into a data-window-sized RGBA
-// buffer, then copies the part that overlaps the display window into the canvas.
-void ReadLayerIntoCanvas(Imf::MultiPartInputFile& file, int part, const std::vector<std::string>& channels,
-                         const Imath::Box2i& disp, half* canvas)
+// A layer to decode: up to 4 channels mapped onto RGBA, into a zeroed display-window canvas.
+struct LayerRead {
+    std::vector<std::string> channels;
+    half* canvas = nullptr;
+};
+
+// Reads layers of one part as half RGBA. Layers that share no channel are read with a
+// single readPixels call, so each compressed block is decompressed once. The data window
+// is decoded straight into the canvas when it lies inside the display window; otherwise
+// through a buffer whose overlap with the display window is copied.
+void ReadLayersIntoCanvases(Imf::MultiPartInputFile& file, int part, const std::vector<LayerRead>& layers,
+                            const Imath::Box2i& disp)
 {
     Imf::InputPart in(file, part);
     const Imath::Box2i dw = in.header().dataWindow();
     const int w = dw.max.x - dw.min.x + 1, h = dw.max.y - dw.min.y + 1;
     const int cw = disp.max.x - disp.min.x + 1;
-
-    std::string map[4];
-    bool gray = false;
-    MapChannels(channels, map, gray);
-
+    const bool contained = dw.min.x >= disp.min.x && dw.min.y >= disp.min.y && dw.max.x <= disp.max.x && dw.max.y <= disp.max.y;
     const size_t px = sizeof(half) * 4;
-    std::vector<half> tmp(size_t(w) * h * 4);
-    char* base = reinterpret_cast<char*>(tmp.data()) - (ptrdiff_t(dw.min.x) + ptrdiff_t(dw.min.y) * w) * ptrdiff_t(px);
-    Imf::FrameBuffer fb;
     const float fills[4] = { 0, 0, 0, 1 };
-    for (int c = 0; c < 4; ++c) {
-        // A slice whose channel is missing gets its fill value.
-        const std::string name = map[c].empty() ? "__missing_" + std::to_string(c) : map[c];
-        fb.insert(name, Imf::Slice(Imf::HALF, base + c * sizeof(half), px, px * w, 1, 1, fills[c]));
-    }
-    in.setFrameBuffer(fb);
-    in.readPixels(dw.min.y, dw.max.y);
 
-    const int x0 = std::max(dw.min.x, disp.min.x), x1 = std::min(dw.max.x, disp.max.x);
-    const int y0 = std::max(dw.min.y, disp.min.y), y1 = std::min(dw.max.y, disp.max.y);
-    for (int y = y0; y <= y1 && x0 <= x1; ++y) {
-        const half* src = tmp.data() + (size_t(y - dw.min.y) * w + (x0 - dw.min.x)) * 4;
-        half* dst = canvas + (size_t(y - disp.min.y) * cw + (x0 - disp.min.x)) * 4;
-        if (!gray) {
-            std::memcpy(dst, src, size_t(x1 - x0 + 1) * px);
-        } else {
-            for (int x = x0; x <= x1; ++x, src += 4, dst += 4) {
-                dst[0] = dst[1] = dst[2] = src[0];
-                dst[3] = src[3];
+    std::vector<bool> done(layers.size(), false);
+    for (size_t first = 0; first < layers.size(); ++first) {
+        if (done[first]) continue;
+        Imf::FrameBuffer fb;
+        std::set<std::string> used;
+        struct Pending { size_t layer; bool gray; std::vector<half> tmp; };
+        std::vector<Pending> group;
+        for (size_t i = first; i < layers.size(); ++i) {
+            if (done[i]) continue;
+            std::string map[4];
+            bool gray = false;
+            MapChannels(layers[i].channels, map, gray);
+            if (std::any_of(map, map + 4, [&](const std::string& c) { return !c.empty() && used.count(c); })) continue;
+            Pending p{ i, gray, {} };
+            char* base;
+            size_t yStride;
+            if (contained) {
+                base = reinterpret_cast<char*>(layers[i].canvas) - (ptrdiff_t(disp.min.x) + ptrdiff_t(disp.min.y) * cw) * ptrdiff_t(px);
+                yStride = px * cw;
+            } else {
+                p.tmp.resize(size_t(w) * h * 4);
+                base = reinterpret_cast<char*>(p.tmp.data()) - (ptrdiff_t(dw.min.x) + ptrdiff_t(dw.min.y) * w) * ptrdiff_t(px);
+                yStride = px * w;
+            }
+            for (int c = 0; c < 4; ++c) {
+                // A slice whose channel is missing gets its fill value.
+                const std::string name = map[c].empty() ? "__missing_" + std::to_string(i) + "_" + std::to_string(c) : map[c];
+                if (!map[c].empty()) used.insert(map[c]);
+                fb.insert(name, Imf::Slice(Imf::HALF, base + c * sizeof(half), px, yStride, 1, 1, fills[c]));
+            }
+            done[i] = true;
+            group.push_back(std::move(p));
+        }
+        in.setFrameBuffer(fb);
+        in.readPixels(dw.min.y, dw.max.y);
+
+        const int x0 = std::max(dw.min.x, disp.min.x), x1 = std::min(dw.max.x, disp.max.x);
+        const int y0 = std::max(dw.min.y, disp.min.y), y1 = std::min(dw.max.y, disp.max.y);
+        for (const Pending& p : group) {
+            half* canvas = layers[p.layer].canvas;
+            for (int y = y0; y <= y1 && x0 <= x1; ++y) {
+                half* dst = canvas + (size_t(y - disp.min.y) * cw + (x0 - disp.min.x)) * 4;
+                if (!contained) {
+                    const half* src = p.tmp.data() + (size_t(y - dw.min.y) * w + (x0 - dw.min.x)) * 4;
+                    std::memcpy(dst, src, size_t(x1 - x0 + 1) * px);
+                }
+                if (p.gray)
+                    for (int x = x0; x <= x1; ++x, dst += 4) dst[1] = dst[2] = dst[0];
             }
         }
     }
+}
+
+void ReadLayerIntoCanvas(Imf::MultiPartInputFile& file, int part, const std::vector<std::string>& channels,
+                         const Imath::Box2i& disp, half* canvas)
+{
+    ReadLayersIntoCanvases(file, part, { { channels, canvas } }, disp);
 }
 
 // Inserts the Cryptomatte rank channels (id, coverage pairs) as FLOAT slices.
@@ -439,10 +485,8 @@ ImagePtr LoadExrWithOptions(const std::wstring& path, const LoadOptions& opt)
         img->data.assign(size_t(img->width) * img->height * 4 * sizeof(half), 0);
         half* canvas = reinterpret_cast<half*>(img->data.data());
 
-        std::vector<std::string> channels = opt.channels;
-        if (channels.empty())   // default layer with Cryptomatte on: root color channels
-            for (auto it = hdr.channels().begin(); it != hdr.channels().end(); ++it)
-                if (Prefix(it.name()).empty() && IsColorSuffix(it.name())) channels.push_back(it.name());
+        // Default layer with Cryptomatte on: root color channels.
+        const std::vector<std::string> channels = opt.channels.empty() ? RootColorChannels(hdr) : opt.channels;
         if (!(opt.cryptoActive() && opt.cryptoColors)) ReadLayerIntoCanvas(file, part, channels, disp, canvas);
         if (opt.cryptoActive()) CompositeCrypto(DecodeCrypto(file, opt, disp), canvas, img->width, img->height);
 
@@ -461,6 +505,52 @@ ImagePtr LoadExrWithOptions(const std::wstring& path, const LoadOptions& opt)
         img->error = e.what();
     }
     return img;
+}
+
+std::vector<ImagePtr> LoadExrLayers(const std::wstring& path, const std::vector<const LoadOptions*>& opts)
+{
+    std::vector<ImagePtr> out(opts.size());
+    try {
+        Imf::MultiPartInputFile file(ToUtf8(path).c_str());
+        std::map<int, std::vector<size_t>> byPart;
+        for (size_t i = 0; i < opts.size(); ++i) byPart[std::clamp(opts[i]->part, 0, file.parts() - 1)].push_back(i);
+        for (const auto& [part, indices] : byPart) {
+            const Imf::Header& hdr = file.header(part);
+            const Imath::Box2i disp = DisplayWindow(hdr);
+            std::vector<std::shared_ptr<Image>> imgs;
+            std::vector<LayerRead> reads;
+            for (size_t i : indices) {
+                auto img = std::make_shared<Image>();
+                img->width = disp.max.x - disp.min.x + 1;
+                img->height = disp.max.y - disp.min.y + 1;
+                img->type = PixelType::F16;
+                img->data.assign(size_t(img->width) * img->height * 4 * sizeof(half), 0);
+                const std::vector<std::string>& ch = opts[i]->channels;
+                reads.push_back({ ch.empty() ? RootColorChannels(hdr) : ch, reinterpret_cast<half*>(img->data.data()) });
+
+                std::string map[4];
+                bool gray = false;
+                MapChannels(reads.back().channels, map, gray);
+                img->hasAlpha = !map[3].empty();
+                img->description = "EXR";
+                if (!ch.empty()) {
+                    const std::string pre = Prefix(ch[0]);
+                    img->description += " \xC2\xB7 " + (pre.empty() ? ch[0] : pre);
+                }
+                imgs.push_back(img);
+            }
+            ReadLayersIntoCanvases(file, part, reads, disp);
+            for (size_t k = 0; k < indices.size(); ++k) out[indices[k]] = imgs[k];
+        }
+    } catch (const std::exception& e) {
+        for (auto& img : out)
+            if (!img) {
+                auto err = std::make_shared<Image>();
+                err->error = e.what();
+                img = err;
+            }
+    }
+    return out;
 }
 
 ImagePtr ApplyExternalCrypto(const ImagePtr& frame, const std::wstring& mattePath, const LoadOptions& opt)

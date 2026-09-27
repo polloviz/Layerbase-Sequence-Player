@@ -14,3 +14,5 @@ void InitImageIO();   // sets OpenEXR thread pool size
 // opt selects EXR layer / Cryptomatte. With an external Cryptomatte (opt->cryptoFiles)
 // the mask comes from mattePath and works for every format.
 ImagePtr LoadImageFile(const std::wstring& path, const LoadOptions* opt = nullptr, const std::wstring& mattePath = {});
+// Box-filtered copy at 1/factor of the size (edge blocks average what they cover).
+ImagePtr Downscale(const ImagePtr& img, int factor);

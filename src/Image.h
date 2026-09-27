@@ -17,8 +17,11 @@ struct Image {
     std::vector<uint8_t> data;   // width * height * 4 * BytesPerChannel(type)
     std::string description;     // e.g. "EXR · half · PIZ"
     std::string error;           // non-empty if decoding failed
+    int fullW = 0, fullH = 0;    // file resolution when decoded smaller (playback proxy); 0 = width/height
 
     bool valid() const { return error.empty() && width > 0 && height > 0; }
+    int fullWidth() const { return fullW ? fullW : width; }
+    int fullHeight() const { return fullH ? fullH : height; }
     size_t rowBytes() const { return size_t(width) * 4 * BytesPerChannel(type); }
     size_t memorySize() const { return data.size() + sizeof(Image) + description.size() + error.size(); }
 };

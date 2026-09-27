@@ -54,6 +54,9 @@ add_executable(SequencePlayer WIN32
     src/Sequence.h
     src/Settings.cpp
     src/Settings.h
+    src/StackUI.cpp
+    src/TextureUploader.cpp
+    src/TextureUploader.h
     src/UpdateCheck.cpp
     src/UpdateCheck.h
     src/UpdateUI.cpp

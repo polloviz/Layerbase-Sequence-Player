@@ -53,6 +53,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     applyLanguage();
     m_fps = m_settings.defaultFps;
     m_loop = (LoopMode)m_settings.loopMode;
+    if (opts.proxy == 2 || opts.proxy == 4) m_proxy = opts.proxy;
     InitImageIO();
     applyCacheBudget();
 
@@ -96,7 +97,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     initImGui();
     Log("imgui ready");
     std::string err;
-    if (!m_viewer.init(err)) {
+    if (!m_viewer.init(err, m_hdc, m_glrc)) {
         colorInit.wait();
         MessageBoxW(m_hwnd, FromUtf8("Shader error:\n" + err).c_str(), APP_NAME_W, MB_ICONERROR);
         return 1;
@@ -109,17 +110,19 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         m_cliExport = opts;
         m_batchMode = true;
     }
-    // Debug: SP_TEST_OPEN=about|batch|settings|crypto opens a dialog/panel at startup (with SP_DUMP for screenshots).
+    // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack opens a dialog/panel at startup (with SP_DUMP for screenshots).
     if (const wchar_t* t = _wgetenv(L"SP_TEST_OPEN")) {
         const std::wstring w = t;
         if (w == L"about") m_openAbout = true;
         if (w == L"crypto") m_cryptoPanel = true;
+        if (w == L"stack") m_stackPanel = true;
         if (w == L"settings") m_openSettings = true;
         if (w == L"batch") {
             openBatchDialog();
             batchAddPaths({ GetParentDir(initialPath) + L"\\.." });
         }
     }
+    stackTestSetup();
     if (!opts.batchRoot.empty()) {
         m_batchMode = true;           // settings below are for this run only
         m_quitAfterBatch = true;
@@ -385,6 +388,12 @@ long long App::handleMessage(HWND hwnd, unsigned msg, unsigned long long wParam,
         }
         DragFinish(drop);
         if (m_batchRunning || m_exporter || paths.empty()) return 0;
+        // With the stack panel open, dropped sequences become layers.
+        if (m_stackPanel && m_seq && !m_batchDialogOpen) {
+            stackAddSequences(paths);
+            m_renderFrames = 3;
+            return 0;
+        }
         // Several items, or the batch dialog is open: queue them for conversion.
         if (m_batchDialogOpen || paths.size() > 1) {
             if (!m_batchDialogOpen) openBatchDialog();
@@ -450,6 +459,9 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     }
     m_seq = std::make_shared<Sequence>(std::move(seq));
     m_seqExt = GetFileExtension(m_seq->frames[0].path);
+    m_stack.clear();      // stack layers belong to the previous shot
+    m_stackSel = 0;
+    m_shownSet.reset();
 
     // EXR layers: keep the previously viewed layer when the new shot has it.
     const std::string prevLayer = currentLayerLabel();
@@ -539,6 +551,7 @@ void App::loadConfig(const std::string& source, bool persist)
         m_inputUserChosen = false;
         chooseInputForSequence();
     }
+    stackRefreshInputs();
     m_colorDirty = true;
 }
 
@@ -551,12 +564,15 @@ void App::loadCustomConfigDialog()
 void App::chooseInputForSequence()
 {
     if (!m_color.valid()) return;
-    const bool isFloat = m_seq ? IsFloatFormat(m_seqExt) : true;
-    const std::string& remembered = m_settings.inputMemory[m_color.source() + (isFloat ? "|float" : "|int")];
-    const std::string path = m_seq ? ToUtf8(m_seq->frames[0].path) : std::string();
-    m_color.input = (!remembered.empty() && m_color.hasColorSpace(remembered))
-        ? remembered : m_color.defaultInput(isFloat, path);
+    m_color.input = autoInput(m_seq ? IsFloatFormat(m_seqExt) : true, m_seq ? m_seq->frames[0].path : std::wstring());
     m_colorDirty = true;
+}
+
+std::string App::autoInput(bool isFloat, const std::wstring& path) const
+{
+    auto it = m_settings.inputMemory.find(m_color.source() + (isFloat ? "|float" : "|int"));
+    if (it != m_settings.inputMemory.end() && !it->second.empty() && m_color.hasColorSpace(it->second)) return it->second;
+    return m_color.defaultInput(isFloat, ToUtf8(path));
 }
 
 void App::setInput(const std::string& name, bool userChoice)
@@ -668,6 +684,8 @@ int App::nextIndex(int from, int dir, bool& reverse) const
 void App::updatePlayback()
 {
     const double now = Now();
+    // Proxy changed, or an export started / ended: decode at the right resolution.
+    if (m_seq && (m_exporter || m_batchRunning ? 1 : m_proxy) != m_planProxy) applyLoadPlan();
     if (m_playDir != 0 && frameCount() > 0) {
         const double period = 1.0 / std::max(0.1, m_fps);
         if (now >= m_nextTick) {
@@ -675,7 +693,7 @@ void App::updatePlayback()
             const int next = nextIndex(m_index, m_playDir, reverse);
             if (next < 0) {
                 m_playDir = 0;
-            } else if (m_cache.get(next)) {
+            } else if (m_cache.get(next)) {   // every layer decoded
                 if (reverse) m_playDir = -m_playDir;
                 m_index = next;
                 m_nextTick += period;
@@ -693,18 +711,19 @@ void App::updatePlayback()
     if (m_exporter) {
         m_playDir = 0;
         m_cache.setPlayhead(m_exportNext, 1, m_exportFirst, m_exportLast, false);
-        if (ImagePtr cur = m_cache.get(m_index)) { m_shown = cur; m_viewer.setMatteMode(m_matte); }
+        if (FrameSetPtr cur = m_cache.get(m_index)) showFrame(cur);
     } else if (frameCount() > 0) {
         m_cache.setPlayhead(m_index, m_playDir < 0 ? -1 : 1, m_in, m_out, m_loop != LoopMode::Once);
-        if (ImagePtr cur = m_cache.get(m_index)) { m_shown = cur; m_viewer.setMatteMode(m_matte); }
+        if (FrameSetPtr cur = m_cache.get(m_index)) showFrame(cur);
     }
     static double lastFpsLog = 0.0;
     if (m_playDir != 0 && now - lastFpsLog > 1.0) {
         lastFpsLog = now;
         static int lastRendered = 0;
-        Log("playing frame %d  fps %.2f (target %.3f)  renders/s %d  cache %zu MB", m_index, m_actualFps, m_fps,
-            m_framesRendered - lastRendered, m_cache.usedBytes() >> 20);
+        Log("playing frame %d  fps %.2f (target %.3f)  renders/s %d  cache %zu MB  viewer max %.1f ms", m_index, m_actualFps, m_fps,
+            m_framesRendered - lastRendered, m_cache.usedBytes() >> 20, m_viewerMsMax);
         lastRendered = m_framesRendered;
+        m_viewerMsMax = 0.0;
     }
     if (now - m_lastMaskUpdate > 0.1) {
         m_cache.stateMask(m_cacheMask);
@@ -718,12 +737,30 @@ void App::rebuildColorIfNeeded()
     m_colorDirty = false;
     std::string err;
     m_colorError.clear();
-    if (!m_colorManaged || !m_color.valid()) {
+    const bool managed = m_colorManaged && m_color.valid();
+    std::string source = m_color.input;
+    if (stackActive()) {
+        // Each layer is converted to the working space and blended there; the view runs once.
+        m_stackInputs.clear();
+        for (const StackLayer& s : m_stack)
+            if (std::find(m_stackInputs.begin(), m_stackInputs.end(), s.input) == m_stackInputs.end()) m_stackInputs.push_back(s.input);
+        std::vector<OCIO::ConstGPUProcessorRcPtr> procs(m_stackInputs.size());
+        if (managed) {
+            source = m_color.workingSpace();
+            if (source.empty()) source = m_stack.front().input;
+            for (size_t i = 0; i < procs.size(); ++i)
+                if (!(procs[i] = m_color.buildConversion(m_stackInputs[i], source)) && m_colorError.empty()) m_colorError = m_color.error();
+        }
+        if (!m_viewer.setInputTransforms(procs, err) && m_colorError.empty()) m_colorError = err;
+        m_prebuiltGpu.reset();   // built for the single view
+    }
+    if (!managed) {
         m_viewer.setProcessor(nullptr, err);
         return;
     }
-    auto gpu = m_prebuiltGpu ? std::exchange(m_prebuiltGpu, nullptr) : m_color.buildGpuProcessor();
-    Log("GPU processor %s -> %s / %s: %s", m_color.input.c_str(), m_color.display.c_str(), m_color.view.c_str(), gpu ? "ok" : m_color.error().c_str());
+    const auto gpu = stackActive() ? m_color.buildGpuProcessor(source)
+                   : m_prebuiltGpu ? std::exchange(m_prebuiltGpu, nullptr) : m_color.buildGpuProcessor();
+    Log("GPU processor %s -> %s / %s: %s", source.c_str(), m_color.display.c_str(), m_color.view.c_str(), gpu ? "ok" : m_color.error().c_str());
     if (!gpu) {
         m_colorError = m_color.error();
         m_viewer.setProcessor(nullptr, err);
@@ -790,7 +827,7 @@ void App::handleViewerInput(float vx, float vy, float vw, float vh)
 {
     ImGuiIO& io = ImGui::GetIO();
     const ImagePtr& img = m_shown;
-    const int imgW = img && img->valid() ? img->width : 0, imgH = img && img->valid() ? img->height : 0;
+    const int imgW = img && img->valid() ? img->fullWidth() : 0, imgH = img && img->valid() ? img->fullHeight() : 0;
 
     if (m_fit && imgW > 0) {
         m_zoom = std::min(vw / imgW, vh / imgH);
@@ -831,10 +868,20 @@ void App::handleViewerInput(float vx, float vy, float vw, float vh)
         const float lx = m.x - vx, ly = vh - (m.y - vy);   // y up inside viewport
         const int ix = (int)std::floor((lx - left) / m_zoom);
         const int iy = (int)std::floor((top - ly) / m_zoom);
-        if (SamplePixel(*img, ix, iy, m_hoverRGBA)) {
+        // File values of the image, or of the selected stack layer; mapped when that was
+        // decoded smaller (proxy) or has another resolution.
+        ImagePtr src = img;
+        if (stackActive()) {
+            const StackLayer& s = m_stack[std::clamp(m_stackSel, 0, (int)m_stack.size() - 1)];
+            src = m_shownSet ? m_shownSet->find(s.key) : nullptr;
+            m_hoverLayer = s.name;
+        }
+        if (ix >= 0 && iy >= 0 && ix < imgW && iy < imgH) {
             m_hoverValid = true;
             m_hoverX = ix;
             m_hoverY = iy;
+            if (!src || !SamplePixel(*src, int(int64_t(ix) * src->width / imgW), int(int64_t(iy) * src->height / imgH), m_hoverRGBA))
+                std::fill(std::begin(m_hoverRGBA), std::end(m_hoverRGBA), 0.0f);
         }
     }
     // Cryptomatte: a click (not a drag) toggles the object under the cursor.
@@ -877,7 +924,22 @@ void App::frame()
     updatePlayback();
     processBatch();
     processExport();
-    m_viewer.setImage(m_shown);
+    const double viewerStart = Now();
+    if (stackActive() && m_shown) m_viewer.setComposite(compLayers(m_shownSet), m_shown->width, m_shown->height, m_shown->fullWidth(), m_shown->fullHeight());
+    else m_viewer.setImage(m_shown);
+    double viewerMs = (Now() - viewerStart) * 1000.0;
+    // While playing, the next frame is uploaded in the background as this one shows
+    // (from the second frame on: the uploader starts then, off the startup path).
+    std::vector<ImagePtr> upcoming;
+    if (m_playDir != 0 && !m_exporter && m_framesRendered > 0) {
+        bool reverse = false;
+        const int next = nextIndex(m_index, m_playDir, reverse);
+        if (const FrameSetPtr set = next >= 0 ? m_cache.get(next) : nullptr) {
+            if (!stackActive()) upcoming.push_back(set->images[0]);
+            else for (const CompLayer& l : compLayers(set)) upcoming.push_back(l.image);
+        }
+    }
+    m_viewer.prefetch(upcoming);
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -895,7 +957,10 @@ void App::frame()
         glClearColor(0.105f, 0.105f, 0.117f, 1);
         glClear(GL_COLOR_BUFFER_BIT);
         const int viewW = std::max(1, fbW - (int)m_panelW);
+        const double drawStart = Now();
         m_viewer.draw(fbW, fbH, 0, bottom, viewW, std::max(1, fbH - top - bottom), m_zoom, m_panX, m_panY, m_channel);
+        viewerMs += (Now() - drawStart) * 1000.0;
+        m_viewerMsMax = std::max(m_viewerMsMax, viewerMs);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         // SP_DUMP=1: save the 4th frame (UI settled) for headless visual checks;
         // SP_DUMP=<ms>: the first frame after that time. GDI screen capture cannot

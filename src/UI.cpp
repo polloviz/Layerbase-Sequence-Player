@@ -119,8 +119,13 @@ void App::drawUI()
     drawExportProgress();
 
     const float vh = std::max(1.0f, vp->Size.y - m_topBarH - m_bottomBarH);
-    m_panelW = (m_uiVisible && m_cryptoPanel && m_seq) ? std::round(310 * m_dpiScale) : 0.0f;
-    if (m_panelW > 0) drawCryptoPanel(vp->Pos.x + vp->Size.x - m_panelW, vp->Pos.y + m_topBarH, m_panelW, vh);
+    const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel);
+    m_panelW = panel ? std::round((m_stackPanel ? 330 : 310) * m_dpiScale) : 0.0f;
+    if (m_panelW > 0) {
+        const float px = vp->Pos.x + vp->Size.x - m_panelW, py = vp->Pos.y + m_topBarH;
+        if (m_stackPanel) drawStackPanel(px, py, m_panelW, vh);
+        else drawCryptoPanel(px, py, m_panelW, vh);
+    }
     const float vx = vp->Pos.x, vy = vp->Pos.y + m_topBarH;
     const float vw = std::max(1.0f, vp->Size.x - m_panelW);
     handleViewerInput(vx, vy, vw, vh);
@@ -169,7 +174,13 @@ void App::drawTopBar()
     drawConfigCombo(w[0]);
     ImGui::SameLine(0, st.ItemSpacing.x * 2);
     DimLabel(tr(S::Input));
-    drawColorSpaceCombo("##input", w[1]);
+    std::string picked;
+    if (stackActive()) {   // the selected stack layer
+        const int sel = std::clamp(m_stackSel, 0, (int)m_stack.size() - 1);
+        if (drawColorSpaceCombo("##input", w[1], m_stack[sel].input, m_stack[sel].inputAuto, picked)) stackSetInput(sel, picked);
+    } else if (drawColorSpaceCombo("##input", w[1], m_color.input, !m_inputUserChosen, picked)) {
+        setInput(picked, true);
+    }
     ImGui::SameLine();
     drawDisplayViewCombos(w[2], w[3], w[4]);
 
@@ -244,13 +255,13 @@ void App::drawConfigCombo(float width)
     ImGui::SetItemTooltip("%s: %s", tr(S::Config), m_color.source().c_str());
 }
 
-bool App::drawColorSpaceCombo(const char* id, float width)
+bool App::drawColorSpaceCombo(const char* id, float width, const std::string& current, bool isAuto, std::string& picked)
 {
     const float s = m_dpiScale;
     bool changed = false;
     ImGui::SetNextItemWidth(width);
     ImGui::SetNextWindowSizeConstraints(ImVec2(std::max(width, 340 * s), 0), ImVec2(FLT_MAX, FLT_MAX));
-    const std::string preview = m_color.input.empty() ? "-" : m_color.input;
+    const std::string preview = current.empty() ? "-" : current;
     if (ImGui::BeginCombo(id, preview.c_str(), ImGuiComboFlags_HeightLargest)) {
         if (ImGui::IsWindowAppearing()) {
             m_filter[0] = 0;
@@ -258,7 +269,7 @@ bool App::drawColorSpaceCombo(const char* id, float width)
         }
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", tr(S::Search), m_filter, sizeof(m_filter));
-        if (ImGui::Selectable(tr(S::AutoDetect), !m_inputUserChosen)) { setInput("", true); changed = true; }
+        if (ImGui::Selectable(tr(S::AutoDetect), isAuto)) { picked.clear(); changed = true; }
         ImGui::Separator();
 
         ImGui::BeginChild("##list", ImVec2(0, 380 * s), ImGuiChildFlags_None);
@@ -277,9 +288,9 @@ bool App::drawColorSpaceCombo(const char* id, float width)
                     ImGui::TextDisabled("%s", fam.c_str());
                     header = true;
                 }
-                const bool sel = cs.name == m_color.input;
+                const bool sel = cs.name == current;
                 if (ImGui::Selectable(("  " + cs.name).c_str(), sel)) {
-                    setInput(cs.name, true);
+                    picked = cs.name;
                     changed = true;
                     ImGui::CloseCurrentPopup();
                 }
@@ -297,8 +308,8 @@ bool App::drawColorSpaceCombo(const char* id, float width)
         ImGui::EndChild();
         ImGui::EndCombo();
     }
-    if (const ColorSpaceInfo* cs = m_color.findColorSpace(m_color.input))
-        ImGui::SetItemTooltip("%s: %s%s", tr(S::Input), cs->name.c_str(), m_inputUserChosen ? "" : "  (auto)");
+    if (const ColorSpaceInfo* cs = m_color.findColorSpace(current))
+        ImGui::SetItemTooltip("%s: %s%s", tr(S::Input), cs->name.c_str(), isAuto ? "  (auto)" : "");
     return changed;
 }
 
@@ -373,7 +384,7 @@ void App::drawMainMenu()
     ImGui::Separator();
     if (ImGui::MenuItem(tr(S::ExportMovie), "Ctrl+E", false, m_seq && m_shown && m_shown->valid())) openExportDialog();
     if (ImGui::MenuItem(tr(S::BatchMenu), "Ctrl+B")) openBatchDialog();
-    if (ImGui::MenuItem(tr(S::LoadMatte), nullptr, false, m_seq != nullptr)) defer([this] { loadMatteDialog(); });
+    if (ImGui::MenuItem(tr(S::LoadMatte), nullptr, false, m_seq != nullptr && !stackActive())) defer([this] { loadMatteDialog(); });
     ImGui::Separator();
     if (ImGui::MenuItem(tr(S::LoadCustomConfig))) defer([this] { loadCustomConfigDialog(); });
     ImGui::Separator();
@@ -509,7 +520,10 @@ void App::drawTransport()
         ImGui::TextDisabled("%d \xE2\x80\x93 %d  \xC2\xB7  %d %s", m_seq->frames.front().number, m_seq->frames.back().number, n, tr(S::Frames));
         if (m_shown && m_shown->valid()) {
             ImGui::SameLine();
-            ImGui::TextDisabled("\xC2\xB7  %d\xC3\x97%d  \xC2\xB7  %s", m_shown->width, m_shown->height, m_shown->description.c_str());
+            const std::string what = stackActive() ? std::string(tr(S::StackTitle)) + " (" + std::to_string(m_stack.size()) + ")"
+                                                   : m_shown->description;
+            ImGui::TextDisabled("\xC2\xB7  %d\xC3\x97%d%s  \xC2\xB7  %s", m_shown->fullWidth(), m_shown->fullHeight(),
+                                m_planProxy > 1 ? (m_planProxy == 2 ? "  (1:2)" : "  (1:4)") : "", what.c_str());
         }
         ImGui::PopClipRect();
     }
@@ -554,24 +568,43 @@ void App::drawTransport()
     else snprintf(zoomLabel, sizeof(zoomLabel), "%.0f%%", m_zoom * 100.0f);
 
     const float wLoop = ImGui::CalcTextSize(loopLabel).x + st.FramePadding.x * 2;
-    const float wFps = 92 * s, wCh = 64 * s, wZoom = 64 * s;
+    const float wFps = 92 * s, wRes = 52 * s, wCh = 64 * s, wZoom = 64 * s;
     const float wActual = m_playDir != 0 ? ImGui::CalcTextSize("000.0").x + st.ItemSpacing.x : 0;
-    const float wLayer = hasLayers() ? 170 * s + st.ItemSpacing.x : 0;
-    const float wCrypto = n > 0 ? ImGui::CalcTextSize("Cryptomatte").x + st.FramePadding.x * 2 + st.ItemSpacing.x : 0;
-    const float rightW = wLayer + wCrypto + wLoop + wFps + wCh + wZoom + wActual + st.ItemSpacing.x * 3;
+    const bool layerCombo = hasLayers() && !stackActive();   // the stack picks layers per row
+    const float wLayer = layerCombo ? 170 * s + st.ItemSpacing.x : 0;
+    auto buttonW = [&](const char* t) { return ImGui::CalcTextSize(t).x + st.FramePadding.x * 2 + st.ItemSpacing.x; };
+    const float wPanels = n > 0 ? buttonW(tr(S::Stack)) + buttonW("Cryptomatte") : 0;
+    const float rightW = wLayer + wPanels + wLoop + wFps + wRes + wCh + wZoom + wActual + st.ItemSpacing.x * 4;
     ImGui::SetCursorPos(ImVec2(windowW - st.WindowPadding.x - rightW, rowY));
 
-    if (hasLayers()) {
+    if (layerCombo) {
         drawLayerCombo(170 * s);
         ImGui::SameLine();
     }
     if (n > 0) {
+        const ImVec4 onColor(0.29f, 0.56f, 1.0f, 0.45f);
+        const bool stackOn = m_stackPanel || stackActive();
+        if (stackOn) ImGui::PushStyleColor(ImGuiCol_Button, onColor);
+        if (ImGui::Button(tr(S::Stack))) {
+            m_stackPanel = !m_stackPanel;
+            if (m_stackPanel) m_cryptoPanel = false;
+        }
+        if (stackOn) ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%s", tr(S::StackTitle));
+        ImGui::SameLine();
+
         // Always available: a sequence without Cryptomatte can use an external one.
         const bool on = m_cryptoPanel || m_matte != MatteMode::Off;
-        if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.29f, 0.56f, 1.0f, 0.45f));
+        ImGui::BeginDisabled(stackActive());
+        if (on) ImGui::PushStyleColor(ImGuiCol_Button, onColor);
         else if (!hasCrypto()) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        if (ImGui::Button("Cryptomatte")) m_cryptoPanel = !m_cryptoPanel;
+        if (ImGui::Button("Cryptomatte")) {
+            m_cryptoPanel = !m_cryptoPanel;
+            if (m_cryptoPanel) m_stackPanel = false;
+        }
         if (on || !hasCrypto()) ImGui::PopStyleColor();
+        ImGui::EndDisabled();
+        if (stackActive()) ImGui::SetItemTooltip("%s", tr(S::StackNoCrypto));
         ImGui::SameLine();
     }
 
@@ -605,6 +638,23 @@ void App::drawTransport()
         ImGui::EndCombo();
     }
     ImGui::SetItemTooltip("%s", tr(S::FrameRate));
+    ImGui::SameLine();
+
+    // Playback proxy
+    static const int proxies[] = { 1, 2, 4 };
+    const char* proxyNames[] = { tr(S::ResFull), tr(S::ResHalf), tr(S::ResQuarter) };
+    char proxyLabel[16];
+    snprintf(proxyLabel, sizeof(proxyLabel), "1:%d", m_proxy);
+    ImGui::SetNextItemWidth(wRes);
+    if (ImGui::BeginCombo("##proxy", proxyLabel)) {
+        for (int i = 0; i < 3; ++i) {
+            char item[64];
+            snprintf(item, sizeof(item), "1:%d  %s", proxies[i], proxyNames[i]);
+            if (ImGui::Selectable(item, m_proxy == proxies[i])) m_proxy = proxies[i];   // applied by updatePlayback
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("%s", tr(S::Resolution));
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(wCh);
@@ -674,7 +724,7 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
     };
 
     if (m_seq) {
-        const ImagePtr cur = m_cache.get(m_index);
+        const ImagePtr cur = baseImage(m_cache.get(m_index));
         if (cur && !cur->valid()) {
             std::string msg = std::string(tr(S::LoadError)) + "  " + ToUtf8(GetFileName(m_seq->frames[m_index].path)) + "\n" + cur->error;
             const ImVec2 ts = ImGui::CalcTextSize(msg.c_str());
@@ -697,6 +747,7 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
         x += badge(ImVec2(x, y), buf, kText) + 6 * s;
     }
     if (!m_colorManaged) x += badge(ImVec2(x, y), "OCIO OFF", IM_COL32(255, 180, 90, 255)) + 6 * s;
+    if (m_seq && m_planProxy > 1) x += badge(ImVec2(x, y), m_planProxy == 2 ? "PROXY 1:2" : "PROXY 1:4", kText) + 6 * s;
     if (!m_uiVisible && m_seq) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%d", m_seq->frames[m_index].number);
@@ -705,9 +756,9 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
 
     // Pixel inspector (bottom-left)
     if (m_hoverValid) {
-        char buf[160];
-        snprintf(buf, sizeof(buf), "%5d %5d   R %.4f  G %.4f  B %.4f  A %.4f", m_hoverX, m_hoverY,
-                 m_hoverRGBA[0], m_hoverRGBA[1], m_hoverRGBA[2], m_hoverRGBA[3]);
+        char buf[256];
+        snprintf(buf, sizeof(buf), "%s%s%5d %5d   R %.4f  G %.4f  B %.4f  A %.4f", stackActive() ? m_hoverLayer.c_str() : "",
+                 stackActive() ? "   " : "", m_hoverX, m_hoverY, m_hoverRGBA[0], m_hoverRGBA[1], m_hoverRGBA[2], m_hoverRGBA[3]);
         ImGui::PushFont(m_fontMono, 0.0f);
         const float fh = ImGui::GetFontSize();
         badge(ImVec2(vx + pad, vy + vh - pad - fh - 6 * s), buf, kText, m_fontMono);

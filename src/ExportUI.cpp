@@ -78,8 +78,8 @@ void App::openExportDialog()
     m_exportOpt.scalePercent = m_settings.exportScale;
     m_exportOpt.hardware = m_settings.exportHardware;
     m_exportOpt.fps = m_fps;
-    m_exportOpt.width = m_shown->width;
-    m_exportOpt.height = m_shown->height;
+    m_exportOpt.width = m_shown->fullWidth();   // exports decode at full resolution
+    m_exportOpt.height = m_shown->fullHeight();
     m_exportOpt.outputPath = defaultExportPath();
     m_exportInOut = m_in > 0 || m_out < frameCount() - 1;
     m_ffmpeg = FindFFmpeg(FromUtf8(m_settings.ffmpegPath));
@@ -108,6 +108,7 @@ void App::startExport()
     m_exportStartTime = Seconds();
     m_playDir = 0;
     m_index = m_exportFirst;
+    if (m_planProxy != 1) applyLoadPlan();   // exports read full resolution
     Log("export started: %s", ToUtf8(m_exportOpt.outputPath).c_str());
 }
 
@@ -179,15 +180,23 @@ void App::processExport()
     const double t0 = Seconds();
     std::vector<uint8_t> buf;
     while (m_exportNext <= m_exportLast && Seconds() - t0 < 0.030 && m_exporter->canPush()) {
-        ImagePtr img = m_cache.get(m_exportNext);
-        if (!img) break;                                   // still decoding
-        if (!img->valid() || img->width != m_exportOpt.width || img->height != m_exportOpt.height) {
-            const std::string why = img->valid() ? "frame size changes within the sequence" : img->error;
+        const FrameSetPtr set = m_cache.get(m_exportNext);
+        if (!set) break;                                   // still decoding
+        const ImagePtr img = baseImage(set);
+        if (!img || !img->valid() || img->width != m_exportOpt.width || img->height != m_exportOpt.height) {
+            const std::string why = !img ? "no image" : img->valid() ? "frame size changes within the sequence" : img->error;
             finishExport(false, ToUtf8(GetFileName(m_seq->frames[m_exportNext].path)) + " - " + why, true);
             return;
         }
-        m_viewer.setMatteMode(m_loadOpts && m_loadOpts->cryptoActive() ? m_matte : MatteMode::Off);
-        if (!m_viewer.renderToMemory(img, m_channel, m_exporter->is16Bit(), m_exporter->hasAlpha(), buf)) {
+        bool rendered;
+        if (stackActive()) {
+            m_viewer.setComposite(compLayers(set), img->width, img->height, img->fullWidth(), img->fullHeight());
+            rendered = m_viewer.renderCompositeToMemory(m_channel, m_exporter->is16Bit(), m_exporter->hasAlpha(), buf);
+        } else {
+            m_viewer.setMatteMode(m_loadOpts && m_loadOpts->cryptoActive() ? m_matte : MatteMode::Off);
+            rendered = m_viewer.renderToMemory(img, m_channel, m_exporter->is16Bit(), m_exporter->hasAlpha(), buf);
+        }
+        if (!rendered) {
             finishExport(false, "GPU render", true);
             return;
         }
@@ -319,7 +328,10 @@ void App::drawExportDialog()
         if (ImGui::InputDouble("##exportfps", &fps, 0, 0, "%.3f")) o.fps = std::clamp(fps, 1.0, 240.0);
 
         row(tr(S::ColorBaked));
-        if (m_colorManaged)
+        if (m_colorManaged && stackActive())
+            ImGui::TextWrapped("%s (%d) \xE2\x86\x92 %s / %s  \xC2\xB7  %s", tr(S::StackTitle), (int)m_stack.size(), m_color.display.c_str(),
+                               m_color.view.c_str(), tr(S::ColorAsViewed));
+        else if (m_colorManaged)
             ImGui::TextWrapped("%s \xE2\x86\x92 %s / %s  \xC2\xB7  %s", m_color.input.c_str(), m_color.display.c_str(),
                                m_color.view.c_str(), tr(S::ColorAsViewed));
         else
