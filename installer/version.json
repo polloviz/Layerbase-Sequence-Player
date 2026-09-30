@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
-  "notes_en": "AOV stack: composite render passes (multi-layer EXR or separate pass sequences) with blend modes, per-layer color space and exposure, exported as viewed. Playback resolution 1:2 / 1:4 and smoother 4K playback.",
-  "notes_it": "Stack AOV: componi i pass di render (EXR multilayer o sequenze separate) con modalità di fusione, spazio colore ed esposizione per layer, esportati come li vedi. Risoluzione di riproduzione 1:2 / 1:4 e riproduzione 4K più fluida."
+  "notes_en": "Copy or save the current frame as shown (Ctrl+C / Ctrl+S), show it in Explorer, load LUTs, straight or premultiplied alpha, and a confirmation before replacing the open sequence.",
+  "notes_it": "Copia o salva il frame corrente come lo vedi (Ctrl+C / Ctrl+S), mostralo in Esplora risorse, carica LUT, alpha straight o premoltiplicato e conferma prima di sostituire la sequenza aperta."
 }
