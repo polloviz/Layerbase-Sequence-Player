@@ -42,8 +42,10 @@ ImagePtr MissingFrame()
     return img;
 }
 
-// Decodes the layers of frame `index` that are still null. Layers read from the same
-// EXR file are decoded together, so the file is opened and decompressed once.
+}  // namespace
+
+// Layers read from the same EXR file are decoded together, so the file is opened and
+// decompressed once.
 void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vector<ImagePtr>& images)
 {
     std::vector<std::pair<std::wstring, std::vector<size_t>>> byFile;   // first-use order
@@ -82,8 +84,6 @@ void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vec
         for (const auto& [path, layers] : byFile)
             for (size_t k : layers) images[k] = Downscale(images[k], plan.proxy);
 }
-
-}  // namespace
 
 FrameCache::FrameCache()
 {

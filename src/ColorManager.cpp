@@ -235,12 +235,78 @@ OCIO::ConstGPUProcessorRcPtr ColorManager::buildConversion(const std::string& sr
     }
 }
 
+bool ColorManager::hasGradingSpace() const
+{
+    return m_config && m_config->hasRole(OCIO::ROLE_COLOR_TIMING);
+}
+
+OCIO::FileTransformRcPtr ColorManager::lutTransform() const
+{
+    if (lutPath.empty()) return nullptr;
+    auto ft = OCIO::FileTransform::Create();
+    ft->setSrc(lutPath.c_str());
+    ft->setInterpolation(OCIO::INTERP_BEST);
+    return ft;
+}
+
+OCIO::GroupTransformRcPtr ColorManager::gradingLutTransform(const std::string& src) const
+{
+    auto group = OCIO::GroupTransform::Create();
+    auto to = OCIO::ColorSpaceTransform::Create();
+    to->setSrc(src.c_str());
+    to->setDst(OCIO::ROLE_COLOR_TIMING);
+    group->appendTransform(to);
+    group->appendTransform(lutTransform());
+    auto back = OCIO::ColorSpaceTransform::Create();
+    back->setSrc(OCIO::ROLE_COLOR_TIMING);
+    back->setDst(src.c_str());
+    group->appendTransform(back);
+    return group;
+}
+
+bool ColorManager::checkLut(const std::string& path)
+{
+    try {
+        OCIO::ClearAllCaches();   // a file edited since it was last read
+        auto ft = OCIO::FileTransform::Create();
+        ft->setSrc(path.c_str());
+        auto cfg = m_config ? m_config : OCIO::Config::CreateRaw();
+        cfg->getProcessor(ft);
+        m_error.clear();
+        return true;
+    } catch (const std::exception& e) {
+        m_error = e.what();
+        return false;
+    }
+}
+
+OCIO::ConstGPUProcessorRcPtr ColorManager::buildLutProcessor()
+{
+    if (lutPath.empty()) return nullptr;
+    try {
+        auto cfg = m_config ? m_config : OCIO::Config::CreateRaw();
+        auto proc = cfg->getProcessor(lutTransform());
+        m_error.clear();
+        return proc->getOptimizedGPUProcessor(OCIO::OPTIMIZATION_DEFAULT);
+    } catch (const std::exception& e) {
+        m_error = e.what();
+        return nullptr;
+    }
+}
+
 OCIO::ConstGPUProcessorRcPtr ColorManager::buildGpuProcessor(const std::string& src)
 {
     if (!m_config) return nullptr;
+    const bool grading = !lutPath.empty() && !lutOnDisplay();
     if (agxLook() != AgxLook::None) {
         try {
-            auto proc = m_config->getProcessor(buildAgxTransform(agxLook(), src));
+            auto agx = buildAgxTransform(agxLook(), src);
+            OCIO::GroupTransformRcPtr group = agx;
+            if (grading) {
+                group = gradingLutTransform(src);
+                group->appendTransform(agx);
+            }
+            auto proc = m_config->getProcessor(group);
             m_error.clear();
             return proc->getOptimizedGPUProcessor(OCIO::OPTIMIZATION_DEFAULT);
         } catch (const std::exception& e) {
@@ -268,11 +334,19 @@ OCIO::ConstGPUProcessorRcPtr ColorManager::buildGpuProcessor(const std::string& 
                 ec->makeExposureDynamic();
                 vp->setLinearCC(ec);
             }
+            if (grading) vp->setColorTimingCC(lutTransform());
             auto gc = OCIO::ExposureContrastTransform::Create();
             gc->setStyle(OCIO::EXPOSURE_CONTRAST_VIDEO);
             gc->setPivot(1.0);
             gc->makeGammaDynamic();
-            vp->setDisplayCC(gc);
+            if (auto lut = lutOnDisplay() ? lutTransform() : nullptr) {
+                auto displayCC = OCIO::GroupTransform::Create();
+                displayCC->appendTransform(lut);
+                displayCC->appendTransform(gc);
+                vp->setDisplayCC(displayCC);
+            } else {
+                vp->setDisplayCC(gc);
+            }
             return vp->getProcessor(m_config, m_config->getCurrentContext());
         };
 

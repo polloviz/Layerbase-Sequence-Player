@@ -9,7 +9,7 @@
 
 // Usage:
 //   SequencePlayer.exe [--fps <rate>] [--play] [--proxy 2|4] [--config <file.ocio | ocio://name>] [--display <name>] [--view <name>] [path]
-//   SequencePlayer.exe <path> --export <out.mp4|out.mov> [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha]
+//   SequencePlayer.exe <path> --export <out.mp4|out.mov> [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha [--premultiplied]]
 //   SequencePlayer.exe --batch <folder> [--out-dir <folder>] [--codec ...] [--nvenc] [--overwrite]   (recursive)
 //   EXR: [--layer <name>] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select name1,name2]
 //        [--crypto-seq <frame of a Cryptomatte sequence>]   (external matte, matched by frame number)
@@ -36,6 +36,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (a == L"--codec" && i + 1 < argc) opts.exportCodec = ToUtf8(argv[++i]);
         else if (a == L"--nvenc") opts.exportHardware = true;
         else if (a == L"--alpha") opts.exportAlpha = true;
+        else if (a == L"--premultiplied") opts.exportPremultiplied = true;
         else if (a == L"--batch" && i + 1 < argc) opts.batchRoot = argv[++i];
         else if (a == L"--out-dir" && i + 1 < argc) opts.batchOutDir = argv[++i];
         else if (a == L"--overwrite") opts.overwrite = true;

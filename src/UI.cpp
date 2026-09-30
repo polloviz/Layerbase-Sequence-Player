@@ -20,7 +20,7 @@ const ImU32 kText = IM_COL32(230, 230, 235, 255);
 const ImU32 kTextDim = IM_COL32(135, 135, 145, 255);
 const ImU32 kError = IM_COL32(255, 92, 92, 255);
 
-enum class Icon { Menu, Play, Pause, PlayReverse, StepBack, StepForward, First, Last, MarkIn, MarkOut };
+enum class Icon { Menu, Play, Pause, PlayReverse, StepBack, StepForward, First, Last, MarkIn, MarkOut, Copy, Save, Folder };
 
 bool IconButton(const char* id, Icon icon, float size, bool active, const char* tooltip)
 {
@@ -32,7 +32,7 @@ bool IconButton(const char* id, Icon icon, float size, bool active, const char* 
         dl->AddRectFilled(p, ImVec2(p.x + size, p.y + size),
                           ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                           ImGui::GetStyle().FrameRounding);
-    const ImU32 c = active ? kAccent : kText;
+    const ImU32 c = ImGui::GetColorU32(active ? kAccent : kText);   // dimmed when disabled
     const float cx = p.x + size * 0.5f, cy = p.y + size * 0.5f, r = size * 0.2f;
     auto tri = [&](float dir, float ox) {   // dir: +1 right, -1 left
         dl->AddTriangleFilled(ImVec2(cx + ox - r * 0.85f * dir, cy - r), ImVec2(cx + ox - r * 0.85f * dir, cy + r),
@@ -59,6 +59,28 @@ bool IconButton(const char* id, Icon icon, float size, bool active, const char* 
         dl->AddRectFilled(ImVec2(std::min(bx, bx + d * r * 0.7f), cy + r * 1.1f - 2 * t), ImVec2(std::max(bx, bx + d * r * 0.7f), cy + r * 1.1f), c);
         const float ax = bx + d * r * 0.55f;
         dl->AddTriangleFilled(ImVec2(ax, cy - r * 0.5f), ImVec2(ax, cy + r * 0.5f), ImVec2(ax + d * r * 0.9f, cy), c);
+        break;
+    }
+    case Icon::Copy: {   // two sheets
+        const float h = r * 1.1f, t = std::max(1.0f, size * 0.05f);
+        dl->AddRect(ImVec2(cx - h, cy - h), ImVec2(cx + h * 0.4f, cy + h * 0.4f), c, t, 0, t);
+        dl->AddRectFilled(ImVec2(cx - h * 0.4f, cy - h * 0.4f), ImVec2(cx + h, cy + h), c, t);
+        break;
+    }
+    case Icon::Save: {   // arrow into a tray
+        const float h = r * 1.1f, t = std::max(1.0f, size * 0.05f);
+        const ImVec2 tray[] = { ImVec2(cx - h, cy + h * 0.2f), ImVec2(cx - h, cy + h), ImVec2(cx + h, cy + h), ImVec2(cx + h, cy + h * 0.2f) };
+        dl->AddPolyline(tray, 4, c, 0, t);
+        dl->AddRectFilled(ImVec2(cx - t * 0.5f, cy - h), ImVec2(cx + t * 0.5f, cy), c);
+        dl->AddTriangleFilled(ImVec2(cx - h * 0.5f, cy - h * 0.1f), ImVec2(cx + h * 0.5f, cy - h * 0.1f), ImVec2(cx, cy + h * 0.45f), c);
+        break;
+    }
+    case Icon::Folder: {
+        const float h = r * 1.1f, t = std::max(1.0f, size * 0.05f);
+        const ImVec2 pts[] = { ImVec2(cx - h, cy - h * 0.8f), ImVec2(cx - h * 0.2f, cy - h * 0.8f), ImVec2(cx + h * 0.05f, cy - h * 0.5f),
+                               ImVec2(cx + h, cy - h * 0.5f), ImVec2(cx + h, cy + h * 0.8f), ImVec2(cx - h, cy + h * 0.8f) };
+        dl->AddPolyline(pts, 6, c, ImDrawFlags_Closed, t);
+        dl->AddLine(ImVec2(cx - h, cy - h * 0.2f), ImVec2(cx + h, cy - h * 0.2f), c, t);
         break;
     }
     }
@@ -117,6 +139,7 @@ void App::drawUI()
     drawExportDialog();
     drawBatchDialog();
     drawExportProgress();
+    drawReplaceConfirm();
 
     const float vh = std::max(1.0f, vp->Size.y - m_topBarH - m_bottomBarH);
     const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel);
@@ -158,11 +181,11 @@ void App::drawTopBar()
     const ImGuiStyle& st = ImGui::GetStyle();
     const bool hasLooks = !m_color.looks().empty();
     float w[5] = { 190 * s, 230 * s, 160 * s, 260 * s, hasLooks ? 150 * s : 0 };
-    const float wExp = 96 * s, wGam = 76 * s, wToggle = 58 * s;
+    const float wExp = 96 * s, wGam = 76 * s, wLut = 50 * s, wToggle = 58 * s;
     const float labels = DimLabelWidth(tr(S::Input)) + DimLabelWidth(tr(S::Display)) + DimLabelWidth(tr(S::View)) +
                          (hasLooks ? DimLabelWidth(tr(S::Look)) : 0);
     const float windowW = ImGui::GetWindowWidth();
-    const float fixedRight = wExp + wGam + wToggle + st.ItemSpacing.x * 3;
+    const float fixedRight = wExp + wGam + wLut + wToggle + st.ItemSpacing.x * 4;
     const float avail = windowW - 2 * st.WindowPadding.x - frameH - labels - fixedRight - st.ItemSpacing.x * (hasLooks ? 6 : 5) - 16 * s;
     const float want = w[0] + w[1] + w[2] + w[3] + w[4];
     if (want > avail) {
@@ -194,6 +217,9 @@ void App::drawTopBar()
     ImGui::DragFloat("##gamma", &m_gamma, 0.005f, 0.1f, 4.0f, "\xCE\xB3 %.2f");
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) m_gamma = 1.0f;
     ImGui::SetItemTooltip("%s", tr(S::Gamma));
+
+    ImGui::SameLine();
+    drawLutButton(wLut);
 
     ImGui::SameLine();
     const bool on = m_colorManaged;
@@ -378,15 +404,21 @@ void App::drawMainMenu()
             ImGui::SetItemTooltip("%s", f.c_str());
             ImGui::PopID();
         }
-        if (!toOpen.empty()) defer([this, toOpen] { openPath(FromUtf8(toOpen)); });
+        if (!toOpen.empty()) defer([this, toOpen] { requestOpen(FromUtf8(toOpen)); });
         ImGui::EndMenu();
     }
     ImGui::Separator();
-    if (ImGui::MenuItem(tr(S::ExportMovie), "Ctrl+E", false, m_seq && m_shown && m_shown->valid())) openExportDialog();
+    const bool frameReady = m_seq && m_shown && m_shown->valid();
+    if (ImGui::MenuItem(tr(S::CopyFrame), "Ctrl+C", false, frameReady)) defer([this] { copyFrame(); });
+    if (ImGui::MenuItem(tr(S::SaveFrame), "Ctrl+S", false, frameReady)) defer([this] { saveFrameDialog(); });
+    if (ImGui::MenuItem(tr(S::RevealFrame), "Ctrl+Shift+R", false, m_seq != nullptr)) revealFrame();
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr(S::ExportMovie), "Ctrl+E", false, frameReady)) openExportDialog();
     if (ImGui::MenuItem(tr(S::BatchMenu), "Ctrl+B")) openBatchDialog();
     if (ImGui::MenuItem(tr(S::LoadMatte), nullptr, false, m_seq != nullptr && !stackActive())) defer([this] { loadMatteDialog(); });
     ImGui::Separator();
     if (ImGui::MenuItem(tr(S::LoadCustomConfig))) defer([this] { loadCustomConfigDialog(); });
+    if (ImGui::MenuItem(tr(S::LoadLut))) defer([this] { loadLutDialog(); });
     ImGui::Separator();
     if (ImGui::MenuItem(tr(S::Settings))) m_openSettings = true;
     if (ImGui::MenuItem(tr(S::AboutTitle))) m_openAbout = true;
@@ -504,6 +536,18 @@ void App::drawTransport()
         ImGui::PopFont();
         ImGui::SetItemTooltip("%s", tr(S::Frame));
         ImGui::SameLine();
+        const bool frameReady = m_shown && m_shown->valid();
+        std::string tip = std::string(tr(S::CopyFrame)) + "  (Ctrl+C)\n" + tr(S::FrameGrabHint);
+        ImGui::BeginDisabled(!frameReady);
+        if (IconButton("##copyframe", Icon::Copy, fh, false, tip.c_str())) defer([this] { copyFrame(); });
+        ImGui::SameLine(0, 2 * s);
+        tip = std::string(tr(S::SaveFrame)) + "  (Ctrl+S)\n" + tr(S::FrameGrabHint);
+        if (IconButton("##saveframe", Icon::Save, fh, false, tip.c_str())) defer([this] { saveFrameDialog(); });
+        ImGui::EndDisabled();
+        ImGui::SameLine(0, 2 * s);
+        tip = std::string(tr(S::RevealFrame)) + "  (Ctrl+Shift+R)";
+        if (IconButton("##revealframe", Icon::Folder, fh, false, tip.c_str())) revealFrame();
+        ImGui::SameLine();
         // Info text is clipped before the centered transport buttons.
         const float clipX = ImGui::GetWindowPos().x + std::floor((windowW - (fh + 4 * s) * 8.8f) * 0.5f) - 12 * s;
         const ImVec2 cp = ImGui::GetCursorScreenPos();
@@ -572,13 +616,24 @@ void App::drawTransport()
     const float wActual = m_playDir != 0 ? ImGui::CalcTextSize("000.0").x + st.ItemSpacing.x : 0;
     const bool layerCombo = hasLayers() && !stackActive();   // the stack picks layers per row
     const float wLayer = layerCombo ? 170 * s + st.ItemSpacing.x : 0;
+    // Alpha interpretation of the opened sequence (not while its alpha carries a Cryptomatte mask).
+    ImagePtr own = stackActive() ? nullptr : m_shown;
+    for (const StackLayer& l : m_stack)
+        if (!l.seq && m_shownSet) { own = m_shownSet->find(l.key); break; }
+    const bool alphaCombo = own && own->valid() && own->hasAlpha && !(m_loadOpts && m_loadOpts->cryptoActive());
+    const float wAlphaCombo = 128 * s;
+    const float wAlpha = alphaCombo ? wAlphaCombo + st.ItemSpacing.x : 0;
     auto buttonW = [&](const char* t) { return ImGui::CalcTextSize(t).x + st.FramePadding.x * 2 + st.ItemSpacing.x; };
     const float wPanels = n > 0 ? buttonW(tr(S::Stack)) + buttonW("Cryptomatte") : 0;
-    const float rightW = wLayer + wPanels + wLoop + wFps + wRes + wCh + wZoom + wActual + st.ItemSpacing.x * 4;
+    const float rightW = wLayer + wAlpha + wPanels + wLoop + wFps + wRes + wCh + wZoom + wActual + st.ItemSpacing.x * 4;
     ImGui::SetCursorPos(ImVec2(windowW - st.WindowPadding.x - rightW, rowY));
 
     if (layerCombo) {
         drawLayerCombo(170 * s);
+        ImGui::SameLine();
+    }
+    if (alphaCombo) {
+        drawAlphaCombo(wAlphaCombo);
         ImGui::SameLine();
     }
     if (n > 0) {
@@ -842,6 +897,10 @@ void App::drawSettings()
         ImGui::SetCursorPosX(labelW);
         ImGui::TextDisabled("%.2f GB %s", m_cache.usedBytes() / 1073741824.0, tr(S::Cached));
 
+        // Confirmations
+        row(tr(S::Confirmations));
+        ImGui::Checkbox(tr(S::ConfirmReplace), &m_settings.confirmReplace);
+
         // File associations
         ImGui::Spacing();
         ImGui::SeparatorText(tr(S::FileAssoc));
@@ -884,6 +943,134 @@ void App::drawSettings()
             m_settings.save();
             ImGui::CloseCurrentPopup();
         }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
+}
+
+// ---------------------------------------------------------------------------
+
+void App::drawLutButton(float width)
+{
+    const float s = m_dpiScale;
+    const bool on = !m_color.lutPath.empty();
+    if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::ColorConvertU32ToFloat4(kAccentDim));
+    if (ImGui::Button(tr(S::Lut), ImVec2(width, 0))) ImGui::OpenPopup("LutMenu");
+    if (on) ImGui::PopStyleColor();
+    if (on) ImGui::SetItemTooltip("LUT: %s", m_color.lutPath.c_str());
+    else ImGui::SetItemTooltip("%s", tr(S::NoLut));
+
+    if (!ImGui::BeginPopup("LutMenu")) return;
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 340 * s);
+    if (on) ImGui::TextUnformatted(ToUtf8(GetFileName(FromUtf8(m_color.lutPath))).c_str());
+    else ImGui::TextDisabled("%s", tr(S::NoLut));
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr(S::LoadLut))) defer([this] { loadLutDialog(); });
+    if (ImGui::MenuItem(tr(S::RemoveLut), nullptr, false, on)) setLut("");
+
+    ImGui::SeparatorText(tr(S::LutPosition));
+    const bool grading = m_color.hasGradingSpace();
+    if (ImGui::RadioButton(tr(S::LutDisplay), m_color.lutOnDisplay())) {
+        m_color.lutPosition = LutPosition::Display;
+        m_colorDirty = true;
+    }
+    ImGui::SetItemTooltip("%s", tr(S::LutDisplayHint));
+    ImGui::BeginDisabled(!grading);
+    if (ImGui::RadioButton(tr(S::LutGrading), !m_color.lutOnDisplay())) {
+        m_color.lutPosition = LutPosition::Grading;
+        m_colorDirty = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("%s", grading ? tr(S::LutGradingHint) : tr(S::LutNoGrading));
+    m_settings.lutPosition = (int)m_color.lutPosition;
+    if (!m_colorManaged) ImGui::TextDisabled("%s", tr(S::LutRawHint));
+
+    if (!m_settings.recentLuts.empty()) {
+        ImGui::SeparatorText(tr(S::RecentLuts));
+        std::string toLoad;
+        for (const auto& path : m_settings.recentLuts) {
+            ImGui::PushID(path.c_str());
+            if (ImGui::MenuItem(ToUtf8(GetFileName(FromUtf8(path))).c_str(), nullptr, path == m_color.lutPath)) toLoad = path;
+            ImGui::SetItemTooltip("%s", path.c_str());
+            ImGui::PopID();
+        }
+        if (!toLoad.empty()) setLut(toLoad == m_color.lutPath ? std::string() : toLoad);   // the checked one toggles off
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndPopup();
+}
+
+void App::drawAlphaCombo(float width)
+{
+    const float s = m_dpiScale;
+    ImagePtr own = stackActive() ? nullptr : m_shown;
+    for (const StackLayer& l : m_stack)
+        if (!l.seq && m_shownSet) { own = m_shownSet->find(l.key); break; }
+    const AlphaMode mode = alphaModeFor(own);
+    const std::string preview = std::string("\xCE\xB1 ") + (mode == AlphaMode::Premultiplied ? tr(S::AlphaPremult) : tr(S::AlphaStraight));
+    ImGui::SetNextItemWidth(width);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::max(width, 180 * s), 0), ImVec2(FLT_MAX, FLT_MAX));
+    if (ImGui::BeginCombo("##alpha", preview.c_str())) {
+        if (ImGui::Selectable(tr(S::AlphaStraight), mode == AlphaMode::Straight)) m_alphaOverride = (int)AlphaMode::Straight;
+        if (ImGui::Selectable(tr(S::AlphaPremult), mode == AlphaMode::Premultiplied)) m_alphaOverride = (int)AlphaMode::Premultiplied;
+        ImGui::EndCombo();
+    }
+    if (ImGui::BeginItemTooltip()) {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28);
+        ImGui::Text("%s: %s%s", tr(S::Alpha), mode == AlphaMode::Premultiplied ? tr(S::AlphaPremult) : tr(S::AlphaStraight),
+                    m_alphaOverride < 0 ? (std::string("  (") + tr(S::AlphaDetected) + ")").c_str() : "");
+        ImGui::TextDisabled("%s", tr(S::AlphaHint));
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+void App::drawReplaceConfirm()
+{
+    const float s = m_dpiScale;
+    if (m_openReplace) {
+        ImGui::OpenPopup("###replace");
+        m_openReplace = false;
+        m_replaceDontAsk = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(480 * s, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * s, 14 * s));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10 * s);
+    const std::string title = std::string(tr(S::ReplaceTitle)) + "###replace";
+    if (ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextWrapped("%s", tr(S::ReplaceText));
+        if (m_seq) ImGui::TextDisabled("%s", ToUtf8(m_seq->displayName()).c_str());
+        ImGui::TextDisabled("\xE2\x86\x92 %s", ToUtf8(GetFileName(m_pendingOpen)).c_str());
+        const std::vector<const char*> lost = workToLose();
+        if (!lost.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.31f, 1), "%s", tr(S::ReplaceLoses));
+            for (const char* w : lost) ImGui::BulletText("%s", w);
+        }
+        ImGui::Spacing();
+        ImGui::Checkbox(tr(S::DontAskAgain), &m_replaceDontAsk);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        const float bw = 120 * s;
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2 * bw - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().WindowPadding.x);
+        if (ImGui::Button(tr(S::Cancel), ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            m_pendingOpen.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.29f, 0.56f, 1.0f, 0.75f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.29f, 0.56f, 1.0f, 0.9f));
+        if (ImGui::Button(tr(S::OpenAnyway), ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
+            if (m_replaceDontAsk) m_settings.confirmReplace = false;
+            defer([this, path = std::move(m_pendingOpen)] { openPath(path); });
+            m_pendingOpen.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(2);
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);

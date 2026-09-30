@@ -51,6 +51,11 @@ PNG (8/16-bit), JPEG, TGA, BMP, HDR, PSD.
 - **Quick controls**: Input (searchable), Display, View, Look, exposure (EV) and gamma, always visible at the top.
 - **Automatic input selection**: EXR/HDR as scene-linear, integer formats as sRGB. Your last choice is remembered per config.
 - The whole color transform runs on the **GPU**, so playback stays smooth even with ACES.
+- **LUTs**: load a `.cube`, `.3dl`, `.csp`, `.clf` or any other LUT OpenColorIO reads, after the view (creative LUTs for Rec.709/sRGB)
+  or before it in the grading space (ACEScct in the ACES configs). The LUT is part of playback, frame captures, export and batch conversion.
+- **Alpha straight or premultiplied**: for sequences with an alpha channel you choose how the color is stored
+  (premultiplied by default, as renderers write it; TIFF files that declare straight alpha are recognized),
+  so edges and transparent areas look right.
 
 **Why it helps:** you see the render exactly as it will look in the final pipeline, without opening compositing software
 and without color mistakes in your previews.
@@ -65,6 +70,10 @@ and without color mistakes in your previews.
   while export always uses full resolution.
 - Frames are sent to the graphics card in the background while the previous one is on screen, so large renders stay smooth.
 - R, G, B, A and luminance channels. The pixel inspector shows the actual float values under the cursor.
+- **Current frame in one click**: copy it to the clipboard (Ctrl+C) or save it as PNG, JPEG or 16-bit TIFF (Ctrl+S),
+  at full resolution and exactly as you see it (color, LUT, exposure, channel, mask, AOV stack).
+  Another button shows the frame's file selected in File Explorer.
+- **No lost work**: opening another sequence by mistake asks for confirmation first.
 
 ## 5. Multi-layer EXR
 
@@ -110,8 +119,9 @@ without going through compositing.
 ## 7. Movie export (Ctrl+E)
 
 - **H.264** and **H.265** (MP4), including NVIDIA NVENC hardware encoding.
-- **ProRes** 422 Proxy, LT, 422, HQ and **4444** with alpha (MOV).
-- Color is applied **exactly as you see it** on screen (config, view, look, exposure, gamma, layer, mask, AOV stack).
+- **ProRes** 422 Proxy, LT, 422, HQ and **4444** with alpha (MOV), with straight color (what Premiere Pro and Final Cut expect)
+  or premultiplied.
+- Color is applied **exactly as you see it** on screen (config, view, look, LUT, exposure, gamma, layer, mask, AOV stack).
 - H.265 and ProRes are encoded from 16-bit-per-channel data. Files are tagged with the correct primaries and transfer curve
   (sRGB, Rec.709, P3, Rec.2020, PQ), so players display them with the right colors.
 - Full range or In/Out only, 100/50/25% scale, frame rate of your choice.
@@ -158,6 +168,8 @@ without going through compositing.
 | R G B A Y, C | channels, back to RGB |
 | Tab | hide interface |
 | F11 / double-click | fullscreen |
+| Ctrl+C / Ctrl+S | copy frame / save frame |
+| Ctrl+Shift+R | show frame in File Explorer |
 | Ctrl+E | export movie |
 | Ctrl+B | batch convert |
 

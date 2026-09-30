@@ -53,6 +53,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     applyLanguage();
     m_fps = m_settings.defaultFps;
     m_loop = (LoopMode)m_settings.loopMode;
+    m_color.lutPosition = (LutPosition)m_settings.lutPosition;
     if (opts.proxy == 2 || opts.proxy == 4) m_proxy = opts.proxy;
     InitImageIO();
     applyCacheBudget();
@@ -110,10 +111,13 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         m_cliExport = opts;
         m_batchMode = true;
     }
-    // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack opens a dialog/panel at startup (with SP_DUMP for screenshots).
+    // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack|replace opens a dialog/panel at startup (with SP_DUMP for
+    // screenshots); SP_TEST_LUT=<file> loads a LUT.
+    if (const wchar_t* l = _wgetenv(L"SP_TEST_LUT")) setLut(ToUtf8(l));
     if (const wchar_t* t = _wgetenv(L"SP_TEST_OPEN")) {
         const std::wstring w = t;
         if (w == L"about") m_openAbout = true;
+        if (w == L"replace" && m_seq) { m_pendingOpen = initialPath; m_openReplace = true; }
         if (w == L"crypto") m_cryptoPanel = true;
         if (w == L"stack") m_stackPanel = true;
         if (w == L"settings") m_openSettings = true;
@@ -142,6 +146,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
             if (opts.exportCodec == c.name) m_batchOpt.codec = c.codec;
         m_batchOpt.hardware = opts.exportHardware;
         m_batchOpt.alpha = opts.exportAlpha;
+        m_batchOpt.premultiplied = opts.exportPremultiplied;
         if (fpsOverride > 0) m_batchOpt.fps = fpsOverride;
         batchAddPaths({ opts.batchRoot });
         if (m_batch.empty()) {
@@ -400,7 +405,7 @@ long long App::handleMessage(HWND hwnd, unsigned msg, unsigned long long wParam,
             batchAddPaths(paths);
             m_renderFrames = 3;
         } else {
-            openPath(paths[0]);
+            requestOpen(paths[0]);
         }
         return 0;
     }
@@ -472,6 +477,7 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     m_crypto = 0;
     m_cryptoSel.clear();
     m_lastPick.clear();
+    m_alphaOverride = -1;
     m_matteSeq.reset();   // an external matte belongs to the previous shot
     m_matteInfo = ExrInfo();
     m_matteFiles.reset();
@@ -495,6 +501,28 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     claimSequence();
     if (addToRecent) Settings::PushRecent(m_settings.recentFiles, ToUtf8(path));
     updateTitle();
+}
+
+void App::requestOpen(const std::wstring& path)
+{
+    if (m_seq && m_settings.confirmReplace && !m_batchMode) {
+        m_pendingOpen = path;
+        m_openReplace = true;
+        return;
+    }
+    openPath(path);
+}
+
+std::vector<const char*> App::workToLose() const
+{
+    std::vector<const char*> w;
+    if (!m_seq) return w;
+    if (stackActive()) w.push_back(tr(S::ReplaceStack));
+    if (m_in > 0 || m_out < frameCount() - 1) w.push_back(tr(S::ReplaceInOut));
+    if (!m_cryptoSel.empty()) w.push_back(tr(S::ReplaceCrypto));
+    if (m_matteSeq) w.push_back(tr(S::ReplaceMatte));
+    if (m_alphaOverride >= 0) w.push_back(tr(S::ReplaceAlpha));
+    return w;
 }
 
 void App::claimSequence()
@@ -530,7 +558,7 @@ void App::activateOtherInstance()
 void App::openDialog(bool folder)
 {
     std::wstring p = ShowOpenFileDialog(m_hwnd, folder, FromUtf8(folder ? tr(S::OpenFolder) : tr(S::Open)).c_str());
-    if (!p.empty()) openPath(p);
+    if (!p.empty()) requestOpen(p);
 }
 
 void App::loadConfig(const std::string& source, bool persist)
@@ -559,6 +587,27 @@ void App::loadCustomConfigDialog()
 {
     std::wstring p = ShowOpenOcioDialog(m_hwnd, FromUtf8(tr(S::LoadCustomConfig)).c_str());
     if (!p.empty()) loadConfig(ToUtf8(p));
+}
+
+void App::loadLutDialog()
+{
+    std::wstring p = ShowOpenFilteredDialog(m_hwnd, FromUtf8(tr(S::LoadLut)).c_str(), L"LUT",
+                                            L"*.cube;*.3dl;*.csp;*.spi1d;*.spi3d;*.spimtx;*.clf;*.ctf;*.cc;*.ccc;*.cdl;*.cub;*.itx;*.look;*.mga;*.m3d;*.vf;*.hdl;*.lut;*.1dl");
+    if (!p.empty()) setLut(ToUtf8(p));
+}
+
+void App::setLut(const std::string& path)
+{
+    if (!path.empty() && !m_color.checkLut(path)) {
+        showToast(std::string(tr(S::LutError)) + ": " + m_color.error(), true);
+        auto& r = m_settings.recentLuts;
+        r.erase(std::remove(r.begin(), r.end(), path), r.end());
+        return;
+    }
+    m_color.lutPath = path;
+    if (!path.empty()) Settings::PushRecent(m_settings.recentLuts, path);
+    m_prebuiltGpu.reset();   // built without it
+    m_colorDirty = true;
 }
 
 void App::chooseInputForSequence()
@@ -755,7 +804,11 @@ void App::rebuildColorIfNeeded()
         m_prebuiltGpu.reset();   // built for the single view
     }
     if (!managed) {
-        m_viewer.setProcessor(nullptr, err);
+        // Only the LUT, when one is loaded, on the file values.
+        const auto lut = m_color.buildLutProcessor();
+        if (!lut && !m_color.lutPath.empty()) m_colorError = m_color.error();
+        if (!m_viewer.setProcessor(lut, err) && m_colorError.empty()) m_colorError = err;
+        if (!m_colorError.empty()) showToast(std::string(tr(S::ConfigError)) + ": " + m_colorError, true);
         return;
     }
     const auto gpu = stackActive() ? m_color.buildGpuProcessor(source)
@@ -788,6 +841,9 @@ void App::handleShortcuts()
     if (ctrl && pressed(ImGuiKey_O)) { defer([this, shift] { openDialog(shift); }); return; }
     if (ctrl && pressed(ImGuiKey_E)) { openExportDialog(); return; }
     if (ctrl && pressed(ImGuiKey_B)) { openBatchDialog(); return; }
+    if (ctrl && pressed(ImGuiKey_C)) { defer([this] { copyFrame(); }); return; }
+    if (ctrl && pressed(ImGuiKey_S)) { defer([this] { saveFrameDialog(); }); return; }
+    if (ctrl && shift && pressed(ImGuiKey_R)) { revealFrame(); return; }
     if (ctrl) return;
 
     if (pressed(ImGuiKey_Space)) setPlaying(m_playDir != 0 ? 0 : 1);

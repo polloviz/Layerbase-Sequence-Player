@@ -14,6 +14,7 @@ struct Image {
     int height = 0;
     PixelType type = PixelType::U8;
     bool hasAlpha = false;
+    bool straightAlpha = false;  // the file declares unassociated (straight) alpha (TIFF ExtraSamples)
     std::vector<uint8_t> data;   // width * height * 4 * BytesPerChannel(type)
     std::string description;     // e.g. "EXR · half · PIZ"
     std::string error;           // non-empty if decoding failed

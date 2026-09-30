@@ -77,6 +77,7 @@ void App::openExportDialog()
     m_exportOpt.quality = (ExportQuality)m_settings.exportQuality;
     m_exportOpt.scalePercent = m_settings.exportScale;
     m_exportOpt.hardware = m_settings.exportHardware;
+    m_exportOpt.premultiplied = m_settings.exportPremultiplied;
     m_exportOpt.fps = m_fps;
     m_exportOpt.width = m_shown->fullWidth();   // exports decode at full resolution
     m_exportOpt.height = m_shown->fullHeight();
@@ -93,6 +94,7 @@ void App::startExport()
     m_settings.exportQuality = (int)m_exportOpt.quality;
     m_settings.exportScale = m_exportOpt.scalePercent;
     m_settings.exportHardware = m_exportOpt.hardware;
+    if (!m_batchMode) m_settings.exportPremultiplied = m_exportOpt.premultiplied;
 
     auto exporter = std::make_unique<MovieExporter>();
     std::string err;
@@ -128,6 +130,7 @@ void App::processExport()
         m_exportOpt.outputPath = m_cliExport.exportPath;
         m_exportOpt.hardware = m_cliExport.exportHardware;
         m_exportOpt.alpha = m_cliExport.exportAlpha;
+        m_exportOpt.premultiplied = m_cliExport.exportPremultiplied;
         for (auto& c : codecs)
             if (m_cliExport.exportCodec == c.name) m_exportOpt.codec = c.codec;
         if (m_cliExport.exportCodec.empty()) {
@@ -179,6 +182,7 @@ void App::processExport()
 
     const double t0 = Seconds();
     std::vector<uint8_t> buf;
+    m_viewer.setPremultipliedOutput(m_exportOpt.premultiplied);
     while (m_exportNext <= m_exportLast && Seconds() - t0 < 0.030 && m_exporter->canPush()) {
         const FrameSetPtr set = m_cache.get(m_exportNext);
         if (!set) break;                                   // still decoding
@@ -194,6 +198,7 @@ void App::processExport()
             rendered = m_viewer.renderCompositeToMemory(m_channel, m_exporter->is16Bit(), m_exporter->hasAlpha(), buf);
         } else {
             m_viewer.setMatteMode(m_loadOpts && m_loadOpts->cryptoActive() ? m_matte : MatteMode::Off);
+            m_viewer.setAlphaMode(alphaModeFor(img));
             rendered = m_viewer.renderToMemory(img, m_channel, m_exporter->is16Bit(), m_exporter->hasAlpha(), buf);
         }
         if (!rendered) {
@@ -261,6 +266,14 @@ void App::drawCodecRows(ExportOptions& o, float labelW)
     if (o.codec == ExportCodec::ProRes4444) {
         row("Alpha");
         ImGui::Checkbox(tr(S::ExportAlpha), &o.alpha);
+        if (o.alpha) {
+            row(tr(S::ExportAlphaKind));
+            if (ImGui::RadioButton(tr(S::AlphaStraight), !o.premultiplied)) o.premultiplied = false;
+            ImGui::SetItemTooltip("%s", tr(S::ExportAlphaHint));
+            ImGui::SameLine();
+            if (ImGui::RadioButton(tr(S::AlphaPremult), o.premultiplied)) o.premultiplied = true;
+            ImGui::SetItemTooltip("%s", tr(S::ExportAlphaHint));
+        }
     }
 
     row(tr(S::Size));
@@ -336,6 +349,10 @@ void App::drawExportDialog()
                                m_color.view.c_str(), tr(S::ColorAsViewed));
         else
             ImGui::TextWrapped("%s", tr(S::ColorOff));
+        if (!m_color.lutPath.empty()) {
+            ImGui::SetCursorPosX(labelW);
+            ImGui::TextWrapped("LUT: %s", ToUtf8(GetFileName(FromUtf8(m_color.lutPath))).c_str());
+        }
 
         // Output
         row(tr(S::OutputFile));

@@ -16,6 +16,7 @@ void Settings::load()
     std::string line;
     recentFiles.clear();
     recentConfigs.clear();
+    recentLuts.clear();
     while (std::getline(f, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         size_t eq = line.find('=');
@@ -36,10 +37,16 @@ void Settings::load()
             if (tab != std::string::npos) inputMemory[v.substr(0, tab)] = v.substr(tab + 1);
         }
         else if (k == "recentFile") recentFiles.push_back(v);
+        else if (k == "recentLut") recentLuts.push_back(v);
+        else if (k == "lutPosition") lutPosition = std::clamp(toInt(0), 0, 1);
+        else if (k == "confirmReplace") confirmReplace = toInt(1) != 0;
+        else if (k == "frameSaveDir") frameSaveDir = v;
+        else if (k == "frameSaveExt") frameSaveExt = v;
         else if (k == "exportCodec") exportCodec = std::clamp(toInt(0), 0, 6);
         else if (k == "exportQuality") exportQuality = std::clamp(toInt(0), 0, 2);
         else if (k == "exportScale") exportScale = std::clamp(toInt(100), 10, 100);
         else if (k == "exportHardware") exportHardware = toInt(0) != 0;
+        else if (k == "exportPremultiplied") exportPremultiplied = toInt(0) != 0;
         else if (k == "ffmpegPath") ffmpegPath = v;
         else if (k == "checkUpdates") checkUpdates = toInt(1) != 0;
         else if (k == "lastUpdateCheck") { try { lastUpdateCheck = std::stoll(v); } catch (...) {} }
@@ -72,13 +79,17 @@ void Settings::save() const
       << "winX=" << winX << "\nwinY=" << winY << "\nwinW=" << winW << "\nwinH=" << winH << "\n"
       << "winMaximized=" << (winMaximized ? 1 : 0) << "\n"
       << "exportCodec=" << exportCodec << "\nexportQuality=" << exportQuality << "\nexportScale=" << exportScale << "\n"
-      << "exportHardware=" << (exportHardware ? 1 : 0) << "\nffmpegPath=" << ffmpegPath << "\n"
+      << "exportHardware=" << (exportHardware ? 1 : 0) << "\nexportPremultiplied=" << (exportPremultiplied ? 1 : 0)
+      << "\nffmpegPath=" << ffmpegPath << "\n"
       << "batchDest=" << batchDest << "\nbatchFolder=" << batchFolder << "\nbatchSkipExisting=" << (batchSkipExisting ? 1 : 0)
       << "\nbatchRecursive=" << (batchRecursive ? 1 : 0) << "\nbatchCurrentInput=" << (batchCurrentInput ? 1 : 0)
       << "\nbatchUseLayer=" << (batchUseLayer ? 1 : 0) << "\n"
+      << "lutPosition=" << lutPosition << "\nconfirmReplace=" << (confirmReplace ? 1 : 0) << "\n"
+      << "frameSaveDir=" << frameSaveDir << "\nframeSaveExt=" << frameSaveExt << "\n"
       << "checkUpdates=" << (checkUpdates ? 1 : 0) << "\nlastUpdateCheck=" << lastUpdateCheck << "\nskipVersion=" << skipVersion << "\n";
     for (auto& r : recentConfigs) o << "recentConfig=" << r << "\n";
     for (auto& r : recentFiles) o << "recentFile=" << r << "\n";
+    for (auto& r : recentLuts) o << "recentLut=" << r << "\n";
     for (auto& [key, value] : inputMemory) o << "inputMem=" << key << '\t' << value << "\n";
 
     // Write to temp then replace, so a crash never leaves a truncated file.

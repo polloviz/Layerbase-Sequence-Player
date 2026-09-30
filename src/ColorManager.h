@@ -20,6 +20,12 @@ struct ExternalConfigInfo {
 // Built-in AgX display rendering (Blender/Filament formulation), usable with any config.
 enum class AgxLook : int { None = 0, Base, Punchy, Golden };
 
+// Where a loaded LUT file runs in the pipeline.
+enum class LutPosition : int {
+    Display = 0,   // on the display output, after the view (creative LUTs for Rec.709 / sRGB)
+    Grading,       // in the config's color_timing space (e.g. ACEScct), before the view
+};
+
 struct ColorSpaceInfo {
     std::string name;
     std::string family;
@@ -62,6 +68,17 @@ public:
 
     // Current selection (validated by setters).
     std::string input, display, view, look;   // look empty = config default for the view
+    // LUT file applied by the GPU processors (any format OCIO reads: .cube, .3dl, .csp,
+    // .spi1d/.spi3d, .clf, .cc…); empty = none.
+    std::string lutPath;
+    LutPosition lutPosition = LutPosition::Display;
+    bool hasGradingSpace() const;                    // color_timing role, for LutPosition::Grading
+    // Where the LUT runs: the display output, also when the config has no grading space.
+    bool lutOnDisplay() const { return lutPosition == LutPosition::Display || !hasGradingSpace(); }
+    // Parses a LUT file; false with error() when OCIO cannot read it.
+    bool checkLut(const std::string& path);
+    // The LUT alone on the file values (color management off). Null without a LUT.
+    OCIO::ConstGPUProcessorRcPtr buildLutProcessor();
 
     // Builds the GPU processor for current selection. Returns null on error (see error()).
     OCIO::ConstGPUProcessorRcPtr buildGpuProcessor() { return buildGpuProcessor(input); }
@@ -76,6 +93,9 @@ public:
 private:
     void rebuildLists();
     OCIO::GroupTransformRcPtr buildAgxTransform(AgxLook look, const std::string& src);
+    OCIO::FileTransformRcPtr lutTransform() const;   // null without a LUT
+    // The LUT framed by conversions to and from the grading space.
+    OCIO::GroupTransformRcPtr gradingLutTransform(const std::string& src) const;
 
     OCIO::ConstConfigRcPtr m_config;
     std::string m_source;

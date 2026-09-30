@@ -41,6 +41,7 @@ add_executable(SequencePlayer WIN32
     src/ExrLayers.h
     src/FrameCache.cpp
     src/FrameCache.h
+    src/FrameUI.cpp
     src/GLViewer.cpp
     src/GLViewer.h
     src/I18n.cpp

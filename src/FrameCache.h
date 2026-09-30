@@ -36,6 +36,9 @@ struct FrameSet {
 };
 using FrameSetPtr = std::shared_ptr<const FrameSet>;
 
+// Decodes the layers of frame `index` that are still null (on the calling thread).
+void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vector<ImagePtr>& images);
+
 // Background multi-threaded frame decoder with a memory-bounded cache.
 // Frames are decoded in "look-ahead order" starting at the playhead in the
 // play direction; when the budget is exhausted, frames farthest away in that

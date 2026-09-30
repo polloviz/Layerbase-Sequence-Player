@@ -8,6 +8,7 @@
 #include <shellapi.h>
 #include <winhttp.h>
 #include <algorithm>
+#include <cstring>
 #include <cwctype>
 #include <cstdarg>
 #include <cstdio>
@@ -434,6 +435,64 @@ std::string LoadResourceData(int id)
 void OpenUrl(const wchar_t* url)
 {
     ShellExecuteW(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+void RevealInExplorer(const std::wstring& path)
+{
+    EnsureCom();
+    if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
+        const HRESULT hr = SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        ILFree(pidl);
+        if (SUCCEEDED(hr)) return;
+    }
+    ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+}
+
+bool SetClipboardImage(HWND owner, const uint8_t* rgb, int width, int height, const std::string& png)
+{
+    if (!rgb || width <= 0 || height <= 0) return false;
+    // CF_DIB: bottom-up BGR rows padded to 4 bytes.
+    const size_t stride = (size_t(width) * 3 + 3) & ~size_t(3);
+    const size_t size = sizeof(BITMAPINFOHEADER) + stride * height;
+    HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, size);
+    if (!dib) return false;
+    auto* p = static_cast<uint8_t*>(GlobalLock(dib));
+    BITMAPINFOHEADER bih{ sizeof(bih) };
+    bih.biWidth = width;
+    bih.biHeight = height;
+    bih.biPlanes = 1;
+    bih.biBitCount = 24;
+    bih.biCompression = BI_RGB;
+    bih.biSizeImage = DWORD(stride * height);
+    memcpy(p, &bih, sizeof(bih));
+    for (int y = 0; y < height; ++y) {
+        const uint8_t* src = rgb + size_t(height - 1 - y) * width * 3;
+        uint8_t* dst = p + sizeof(bih) + stride * y;
+        for (int x = 0; x < width; ++x) {
+            dst[x * 3 + 0] = src[x * 3 + 2];
+            dst[x * 3 + 1] = src[x * 3 + 1];
+            dst[x * 3 + 2] = src[x * 3 + 0];
+        }
+        memset(dst + size_t(width) * 3, 0, stride - size_t(width) * 3);
+    }
+    GlobalUnlock(dib);
+
+    if (!OpenClipboard(owner)) {
+        GlobalFree(dib);
+        return false;
+    }
+    EmptyClipboard();
+    bool ok = SetClipboardData(CF_DIB, dib) != nullptr;
+    if (!ok) GlobalFree(dib);
+    if (ok && !png.empty()) {
+        if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, png.size())) {
+            memcpy(GlobalLock(h), png.data(), png.size());
+            GlobalUnlock(h);
+            if (!SetClipboardData(RegisterClipboardFormatW(L"PNG"), h)) GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+    return ok;
 }
 
 bool HttpGet(const std::wstring& url, std::string& body, int timeoutMs)

@@ -22,9 +22,13 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
   - Input (searchable, grouped by family), Display, View, Look, exposure (EV) and gamma;
   - automatic input: EXR/HDR → `scene_linear` (ACEScg), integer formats → sRGB; custom configs use their file rules. The last choice is remembered per config and per format class;
   - **OCIO** button to turn color management off.
+- **LUT:** the *LUT* button (top bar) loads a LUT file in any format OpenColorIO reads (`.cube`, `.3dl`, `.csp`, `.spi1d`/`.spi3d`, `.clf`, `.cc`…), applied after the view on the display output (creative LUTs made for Rec.709/sRGB) or before it, in the config's grading space (`color_timing` role, ACEScct in the ACES configs). With OCIO off the LUT is applied to the file values. It applies to playback, frame captures, export and batch conversion; recent LUTs stay in the menu.
+- **Alpha:** for sequences with an alpha channel, the *α* menu (bottom bar) says whether the color is *straight* or *premultiplied*. Automatic: premultiplied, which is what renderers write (Cinema 4D too, unless *Straight Alpha* is on), except TIFF files that declare straight alpha. Straight images are shown and exported over black. ProRes 4444 with alpha is written with straight color (default, what Premiere Pro and Final Cut expect) or premultiplied, chosen in the export dialog.
 - **Playback:** default **30 fps** (presets 12–120 or custom), loop / once / ping-pong, In/Out points (buttons beside the transport, I/O keys; click the In/Out label to clear), reverse playback, actual fps shown while playing. While playing, the next frame is sent to the GPU from a background thread, so large frames and AOV stacks do not stall the interface.
 - **Playback resolution:** the *1:1 / 1:2 / 1:4* menu (bottom bar, or `--proxy 2|4`) decodes frames at half or quarter size: 4× or 16× less cache memory and GPU traffic, useful for 4K+ renders and AOV stacks. The image keeps its size on screen, the pixel inspector shows file coordinates, and export always reads full resolution.
 - **Viewing:** fit/100%, wheel zoom around the cursor, pan, R/G/B/A/Luma channels, pixel inspector (float values under the cursor), fullscreen, hideable UI.
+- **Current frame:** the buttons beside the frame number copy the frame to the clipboard (Ctrl+C), save it as PNG, JPEG or 16-bit TIFF (Ctrl+S), or show its file selected in File Explorer (Ctrl+Shift+R). Copies and saves are at full resolution (also with a playback proxy) with everything applied in the viewer: color, LUT, exposure, gamma, channel, layer, mask, AOV stack.
+- **Replacing the open sequence:** opening or dropping another sequence asks for confirmation first and lists what would be lost (AOV stack, In/Out, Cryptomatte selection…). It can be turned off in the dialog or in Settings.
 - **Movie export (Ctrl+E):** H.264 and H.265 (MP4, x264/x265 or NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ and 4444 (MOV). Color is applied exactly as displayed (input → display/view, look, exposure, gamma, channel) on the GPU; H.265 and ProRes are fed 16 bits per channel. Files are tagged with the display primaries/transfer (sRGB, Rec.1886, P3, Rec.2020, PQ). Full range or In/Out, 100/50/25% scale, frame rate. **FFmpeg is included**; another build can be chosen in the export dialog (also searched in PATH, `C:\FFMPEG\bin`, winget, choco).
 - **Multi-layer EXR:** layers and multi-part files are listed in the *Layer* menu (bottom bar); the selected layer is shown and exported (XYZ vectors and single channels such as Z are shown as RGB / gray). The layer stays selected when opening another shot that contains it.
 - **Cryptomatte:** the *Cryptomatte* button (bottom bar) opens the panel: layer (CryptoObject/Material/Asset), *IDs* (colors per object), *Overlay*, *Masked* (only the selection, in scene-linear before the view), *Matte* (black and white mask). Select objects by clicking in the viewer or from the manifest list (searchable). The mask applies to playback and export; in ProRes 4444 it can become the alpha channel. Channel names are matched case-insensitively (Octane writes `.r/.g/.b/.a`). A Cryptomatte-only file opens in IDs mode.
@@ -50,6 +54,8 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 | `-` `+` (or `[` `]`), Backspace | exposure ±0.5 EV, reset exposure/gamma |
 | Tab | hide interface |
 | F11 / Enter / double-click | fullscreen |
+| Ctrl+C / Ctrl+S | copy the frame to the clipboard / save it as an image |
+| Ctrl+Shift+R | show the frame's file in File Explorer |
 | Ctrl+O / Ctrl+Shift+O | open file / folder |
 | Ctrl+E | export movie |
 | Ctrl+B | batch convert |
@@ -60,7 +66,7 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 ```
 SequencePlayer.exe [--fps 24] [--play] [--proxy 2|4] [--config C:\path\config.ocio | ocio://studio-config-latest]
                    [--display "sRGB - Display"] [--view "ACES 2.0 - SDR 100 nits (Rec.709)"] [file or folder]
-SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha]
+SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha [--premultiplied]]
                    exports without interaction, then exits (exit code 0 = ok)
 SequencePlayer.exe --batch D:\renders [--out-dir D:\movies] [--codec h264] [--nvenc] [--overwrite]
                    converts every sequence in the folder and subfolders, then exits
@@ -71,7 +77,7 @@ SequencePlayer.exe --register      registers the formats (per user, no admin)
 SequencePlayer.exe --unregister    removes the registration
 ```
 
-Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack` opens a dialog at startup; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
+Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack|replace` opens a dialog at startup; `SP_TEST_LUT=<file>` loads a LUT; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
 
 ## Building
 

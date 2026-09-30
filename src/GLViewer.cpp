@@ -24,10 +24,14 @@ out vec4 fragColor;
 uniform sampler2D uImage;
 uniform int uChannel;
 uniform int uMatte;     // 0 off, 1 ID colors, 2 overlay, 3 masked, 4 matte (mask in alpha)
-uniform int uOutAlpha;  // write alpha (export with alpha)
+uniform int uOutAlpha;  // 0 opaque, 1 alpha with straight color, 2 alpha with premultiplied color (export)
+uniform int uAlphaMode; // 0 opaque or mask in alpha, 1 straight color, 2 premultiplied color
 void main() {
     vec4 src = texture(uImage, vUV);
     float a = src.a;
+    // Shown over black; with alpha the view runs on straight color (premultiplied after it).
+    if (uOutAlpha != 0) { if (uAlphaMode == 2 && a > 0.0) src.rgb /= a; }
+    else if (uAlphaMode == 1) src.rgb *= a;
     if (uChannel == 4 || uMatte == 4) { fragColor = vec4(a, a, a, uOutAlpha != 0 ? a : 1.0); return; }
     if (uMatte == 1) {
         // False-color IDs are display values: no color transform; selection glows.
@@ -35,14 +39,14 @@ void main() {
         fragColor = vec4(c, 1.0);
         return;
     }
-    vec3 rgb = uMatte == 3 ? src.rgb * a : src.rgb;   // mask in scene-linear, before the view
+    vec3 rgb = uMatte == 3 && uOutAlpha == 0 ? src.rgb * a : src.rgb;   // mask in scene-linear, before the view
     vec4 c = OCIODisplay(vec4(rgb, 1.0));
     if (uMatte == 2) c.rgb = mix(c.rgb * 0.3, c.rgb, a) + vec3(0.06, 0.12, 0.3) * a;
     if (uChannel == 1) c.rgb = c.rrr;
     else if (uChannel == 2) c.rgb = c.ggg;
     else if (uChannel == 3) c.rgb = c.bbb;
     else if (uChannel == 5) c.rgb = vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)));
-    fragColor = vec4(c.rgb, uOutAlpha != 0 ? a : 1.0);
+    fragColor = vec4(uOutAlpha == 2 ? c.rgb * a : c.rgb, uOutAlpha != 0 ? a : 1.0);
 }
 )";
 
@@ -252,6 +256,7 @@ bool GLViewer::buildOcioProgram(Program& p, const OCIO::ConstGPUProcessorRcPtr& 
     p.locChannel = glGetUniformLocation(p.id, "uChannel");
     p.locMatte = glGetUniformLocation(p.id, "uMatte");
     p.locOutAlpha = glGetUniformLocation(p.id, "uOutAlpha");
+    p.locAlphaMode = glGetUniformLocation(p.id, "uAlphaMode");
     p.locGain = glGetUniformLocation(p.id, "uGain");
     p.locOpacity = glGetUniformLocation(p.id, "uOpacity");
     p.locMode = glGetUniformLocation(p.id, "uMode");
@@ -319,7 +324,8 @@ void GLViewer::setComposite(const std::vector<CompLayer>& layers, int width, int
     m_compFullW = fullWidth;
     m_compFullH = fullHeight;
     auto same = [](const CompLayer& a, const CompLayer& b) {
-        return a.image == b.image && a.transform == b.transform && a.blend == b.blend && a.opacity == b.opacity && a.gain == b.gain;
+        return a.image == b.image && a.transform == b.transform && a.blend == b.blend && a.opacity == b.opacity && a.gain == b.gain &&
+               a.straight == b.straight;
     };
     if (width == m_compW && height == m_compH && std::equal(layers.begin(), layers.end(), m_comp.begin(), m_comp.end(), same))
         return;
@@ -511,7 +517,7 @@ void GLViewer::compose()
         glUniform1f(p.locGain, l.gain);
         glUniform1f(p.locOpacity, std::clamp(l.opacity, 0.0f, 1.0f));
         glUniform1i(p.locMode, (int)l.blend);
-        glUniform1i(p.locStraight, l.image->type != PixelType::F16 && l.image->hasAlpha ? 1 : 0);
+        glUniform1i(p.locStraight, l.straight && l.image->hasAlpha ? 1 : 0);
         bindOcio(p);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tex);
@@ -576,7 +582,9 @@ void GLViewer::drawDisplay(float x0, float y0, float x1, float y1, bool nearest,
     glUniform1i(p.locImage, 0);
     glUniform1i(p.locChannel, (int)channel);
     glUniform1i(p.locMatte, m_useComp ? 0 : (int)m_matte);
-    glUniform1i(p.locOutAlpha, outAlpha ? 1 : 0);
+    glUniform1i(p.locOutAlpha, !outAlpha ? 0 : m_premultOut ? 2 : 1);
+    // The composite is premultiplied; a Cryptomatte mask replaces the image alpha.
+    glUniform1i(p.locAlphaMode, m_useComp ? (int)AlphaMode::Premultiplied : m_matte != MatteMode::Off ? 0 : (int)m_alpha);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);

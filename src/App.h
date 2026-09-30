@@ -22,6 +22,7 @@ struct StartupOptions {
     std::string exportCodec;              // h264 | h265 | prores-proxy | prores-lt | prores | prores-hq | prores-4444
     bool exportHardware = false;
     bool exportAlpha = false;
+    bool exportPremultiplied = false;     // with alpha: premultiplied instead of straight color
     std::string layer, matte, cryptoLayer, cryptoSelect;   // EXR layer / Cryptomatte setup
     std::wstring matteSeq;                                  // external Cryptomatte sequence
     std::wstring batchRoot, batchOutDir;                    // --batch: convert all sequences, then quit
@@ -30,6 +31,9 @@ struct StartupOptions {
 };
 
 enum class LoopMode : int { Loop = 0, Once = 1, PingPong = 2 };
+
+// Alpha kind of an image when the user has not chosen one: straight only when the file says so.
+AlphaMode AutoAlphaMode(const ImagePtr& img);
 
 // A layer of the AOV stack: an EXR layer (or the whole image) of the opened sequence or
 // of another sequence holding one pass, matched frame by frame.
@@ -69,9 +73,13 @@ private:
 
     // actions
     void openPath(const std::wstring& path, bool addToRecent = true);
+    void requestOpen(const std::wstring& path);   // asks first when it would replace the open sequence
+    std::vector<const char*> workToLose() const;   // what opening another sequence resets
     void openDialog(bool folder);
     void loadConfig(const std::string& source, bool persist = true);
     void loadCustomConfigDialog();
+    void loadLutDialog();
+    void setLut(const std::string& path);   // "" = none
     void chooseInputForSequence();
     void setInput(const std::string& name, bool userChoice);
     void setPlaying(int direction);
@@ -134,8 +142,19 @@ private:
     void drawStackPanel(float x, float y, float w, float h);
     void drawStackAddMenu();
 
+    // Current frame (FrameUI.cpp)
+    AlphaMode alphaModeFor(const ImagePtr& img) const;   // for an image of the opened sequence
+    // The current frame at full resolution through the viewer pipeline, as packed RGB.
+    bool grabFrame(std::vector<uint8_t>& out, int& width, int& height, bool sixteenBit);
+    void copyFrame();
+    void saveFrameDialog();
+    void revealFrame();
+
     // UI (UI.cpp)
     void drawUI();
+    void drawReplaceConfirm();
+    void drawLutButton(float width);
+    void drawAlphaCombo(float width);
     void drawTopBar();
     void drawBottomBar();
     void drawTimeline(float width, float height);
@@ -238,6 +257,7 @@ private:
     float m_exposure = 0.0f;
     float m_gamma = 1.0f;
     std::string m_colorError;
+    int m_alphaOverride = -1;             // AlphaMode chosen for the opened sequence; -1 = from the file type
 
     // EXR layers / Cryptomatte
     ExrInfo m_exrInfo;
@@ -314,6 +334,8 @@ private:
     std::string m_updateVersion, m_updateUrl, m_updateNotes;   // non-empty version = banner shown
 
     // ui state
+    std::wstring m_pendingOpen;           // waits for the replace confirmation
+    bool m_openReplace = false, m_replaceDontAsk = false;
     bool m_openSettings = false;
     bool m_openAbout = false;
     int m_aboutPage = 0;              // 0 info, 1 license, 2 third-party

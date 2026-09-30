@@ -60,8 +60,8 @@ enum class Lang { English = 0, Italian = 1 };
     X(LoadError,         "Cannot load frame",                     "Impossibile caricare il frame") \
     X(ConfigError,       "OCIO error",                            "Errore OCIO") \
     X(Shortcuts,         "Shortcuts",                             "Scorciatoie") \
-    X(ShortcutsText,     "Space  play/pause\nJ / K / L  reverse / stop / forward\nLeft / Right  step\nHome / End  first / last\nI / O  in / out point,  U  clear\nF  fit,  1  100%,  wheel  zoom,  middle drag  pan\nR G B A  channels,  C  RGB\n[ ] or - +  exposure,  Backspace  reset\nTab  hide UI,  F11 / double click  fullscreen\nCtrl+E  export movie,  Ctrl+B  batch convert", \
-                                                                  "Spazio  play/pausa\nJ / K / L  indietro / stop / avanti\nSinistra / Destra  frame singolo\nHome / Fine  primo / ultimo\nI / O  punto in / out,  U  azzera\nF  adatta,  1  100%,  rotella  zoom,  tasto centrale  sposta\nR G B A  canali,  C  RGB\n[ ] oppure - +  esposizione,  Backspace  reset\nTab  nascondi UI,  F11 / doppio clic  schermo intero\nCtrl+E  esporta filmato,  Ctrl+B  conversione batch") \
+    X(ShortcutsText,     "Space  play/pause\nJ / K / L  reverse / stop / forward\nLeft / Right  step\nHome / End  first / last\nI / O  in / out point,  U  clear\nF  fit,  1  100%,  wheel  zoom,  middle drag  pan\nR G B A  channels,  C  RGB\n[ ] or - +  exposure,  Backspace  reset\nTab  hide UI,  F11 / double click  fullscreen\nCtrl+C  copy frame,  Ctrl+S  save frame,  Ctrl+Shift+R  show in Explorer\nCtrl+E  export movie,  Ctrl+B  batch convert", \
+                                                                  "Spazio  play/pausa\nJ / K / L  indietro / stop / avanti\nSinistra / Destra  frame singolo\nHome / Fine  primo / ultimo\nI / O  punto in / out,  U  azzera\nF  adatta,  1  100%,  rotella  zoom,  tasto centrale  sposta\nR G B A  canali,  C  RGB\n[ ] oppure - +  esposizione,  Backspace  reset\nTab  nascondi UI,  F11 / doppio clic  schermo intero\nCtrl+C  copia frame,  Ctrl+S  salva frame,  Ctrl+Shift+R  mostra in Esplora risorse\nCtrl+E  esporta filmato,  Ctrl+B  conversione batch") \
     X(AboutText,         "Fast image sequence player with OpenColorIO, ACES 1.3 and ACES 2.0 support.", \
                                                                   "Player veloce di sequenze di immagini con supporto OpenColorIO, ACES 1.3 e ACES 2.0.") \
     X(InOut,             "In/Out",                                "In/Out") \
@@ -204,7 +204,53 @@ enum class Lang { English = 0, Italian = 1 };
     X(ResHalf,           "half",                                  "metà") \
     X(ResQuarter,        "quarter",                               "un quarto") \
     X(AgxTooltip,        "AgX view transform (Blender formulation), works with any config. SDR: sRGB, Rec.1886 or Display P3 from the selected display.", \
-                                                                  "Vista AgX (formulazione Blender), funziona con qualsiasi config. SDR: sRGB, Rec.1886 o Display P3 in base al display scelto.")
+                                                                  "Vista AgX (formulazione Blender), funziona con qualsiasi config. SDR: sRGB, Rec.1886 o Display P3 in base al display scelto.") \
+    X(CopyFrame,         "Copy frame to clipboard",               "Copia frame negli appunti") \
+    X(SaveFrame,         "Save frame as...",                      "Salva frame con nome...") \
+    X(FrameCopied,       "Frame copied to the clipboard",         "Frame copiato negli appunti") \
+    X(FrameSaved,        "Frame saved",                           "Frame salvato") \
+    X(FrameGrabFailed,   "Cannot capture the frame",              "Impossibile catturare il frame") \
+    X(FrameGrabHint,     "Full resolution, with the color, LUT, exposure, channel and mask shown in the viewer.", \
+                                                                  "Risoluzione piena, con colore, LUT, esposizione, canale e maschera visibili nel viewer.") \
+    X(RevealFrame,       "Show frame in Explorer",                "Mostra frame in Esplora risorse") \
+    X(Lut,               "LUT",                                   "LUT") \
+    X(LoadLut,           "Load LUT...",                           "Carica LUT...") \
+    X(RemoveLut,         "Remove LUT",                            "Rimuovi LUT") \
+    X(RecentLuts,        "Recent LUTs",                           "LUT recenti") \
+    X(NoLut,             "No LUT loaded. A LUT applies to playback, frame captures, export and batch conversion.", \
+                                                                  "Nessuna LUT caricata. La LUT si applica a riproduzione, catture dei frame, export e conversione batch.") \
+    X(LutError,          "Cannot read the LUT",                   "Impossibile leggere la LUT") \
+    X(LutPosition,       "Apply",                                 "Applica") \
+    X(LutDisplay,        "After the view (display)",              "Dopo la vista (display)") \
+    X(LutGrading,        "Before the view (grading space)",       "Prima della vista (spazio di grading)") \
+    X(LutDisplayHint,    "On the display output: for creative LUTs made for Rec.709 / sRGB.", \
+                                                                  "Sull'uscita del display: per LUT creative fatte per Rec.709 / sRGB.") \
+    X(LutGradingHint,    "In the config's grading space (color_timing role, ACEScct in ACES configs), before the view transform.", \
+                                                                  "Nello spazio di grading della config (ruolo color_timing, ACEScct nelle config ACES), prima della vista.") \
+    X(LutNoGrading,      "This config has no color_timing role.", "Questa config non ha il ruolo color_timing.") \
+    X(LutRawHint,        "Color management is off: the LUT is applied to the file values.", \
+                                                                  "La gestione colore è disattivata: la LUT si applica ai valori del file.") \
+    X(Alpha,             "Alpha",                                 "Alpha") \
+    X(AlphaStraight,     "Straight",                              "Straight") \
+    X(AlphaPremult,      "Premultiplied",                         "Premoltiplicato") \
+    X(AlphaHint,         "How the color of this sequence is stored with its alpha. Renders are usually premultiplied (in Cinema 4D, straight only with \"Straight Alpha\" on). Straight images are shown and exported over black.", \
+                                                                  "Come è salvato il colore di questa sequenza rispetto all'alpha. I render di solito sono premoltiplicati (in Cinema 4D straight solo con \"Straight Alpha\" attivo). Le immagini straight sono mostrate ed esportate su nero.") \
+    X(ExportAlphaKind,   "Alpha color",                           "Colore alpha") \
+    X(ExportAlphaHint,   "Straight: what Premiere Pro, Final Cut and most editors expect. Premultiplied: color multiplied by alpha (over black).", \
+                                                                  "Straight: quello che si aspettano Premiere Pro, Final Cut e la maggior parte degli editor. Premoltiplicato: colore moltiplicato per l'alpha (su nero).") \
+    X(AlphaDetected,     "automatic: premultiplied unless the file declares straight alpha (TIFF)", "automatico: premoltiplicato, salvo file che dichiarano alpha straight (TIFF)") \
+    X(ReplaceTitle,      "Open another sequence?",                "Aprire un'altra sequenza?") \
+    X(ReplaceText,       "The open sequence will be closed.",     "La sequenza aperta verrà chiusa.") \
+    X(ReplaceLoses,      "This work will be lost:",               "Questo lavoro andrà perso:") \
+    X(ReplaceStack,      "AOV stack",                             "Stack AOV") \
+    X(ReplaceInOut,      "In/Out points",                         "Punti In/Out") \
+    X(ReplaceCrypto,     "Cryptomatte selection",                 "Selezione Cryptomatte") \
+    X(ReplaceMatte,      "External Cryptomatte sequence",         "Sequenza Cryptomatte esterna") \
+    X(ReplaceAlpha,      "Alpha interpretation",                  "Interpretazione alpha") \
+    X(DontAskAgain,      "Don't ask again (can be changed in Settings)", "Non chiedere più (modificabile in Impostazioni)") \
+    X(ConfirmReplace,    "Ask before replacing the open sequence", "Chiedi prima di sostituire la sequenza aperta") \
+    X(Confirmations,     "Confirmations",                         "Conferme") \
+    X(OpenAnyway,        "Open",                                  "Apri")
 
 enum class S {
 #define X(id, en, it) id,

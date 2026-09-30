@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,11 @@ void OpenDefaultAppsSettings();
 // Raw bytes of an RCDATA resource embedded in the exe.
 std::string LoadResourceData(int id);
 void OpenUrl(const wchar_t* url);
+// Opens the folder in File Explorer with the file selected.
+void RevealInExplorer(const std::wstring& path);
+// Puts an image on the clipboard: packed 8-bit RGB, top row first, as a DIB and,
+// when png is not empty, also as "PNG" (kept lossless by apps that read it).
+bool SetClipboardImage(HWND owner, const uint8_t* rgb, int width, int height, const std::string& png);
 // HTTPS GET (WinHTTP, system proxy settings). Returns false on network/HTTP errors.
 bool HttpGet(const std::wstring& url, std::string& body, int timeoutMs);
 

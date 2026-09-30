@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 
@@ -20,6 +21,8 @@
 #define STBI_NO_PIC
 #define STBI_NO_PNM
 #include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 
 // ---------------------------------------------------------------------------
 
@@ -254,6 +257,13 @@ static ImagePtr LoadTIFF(const std::wstring& path)
         for (uint32_t y = 0; y < h && ok; ++y)
             ok = TIFFReadScanline(tif, raw.data() + y * rawRow, y) >= 0;
     }
+    // Declared alpha kind (libtiff's generic RGBA path above always returns it premultiplied).
+    if (spp == 2 || spp == 4) {
+        uint16_t extraCount = 0;
+        uint16_t* extra = nullptr;
+        if (TIFFGetField(tif, TIFFTAG_EXTRASAMPLES, &extraCount, &extra) && extraCount > 0 && extra)
+            img->straightAlpha = extra[0] == EXTRASAMPLE_UNASSALPHA;
+    }
     TIFFClose(tif);
     if (!ok) return ErrorImage("TIFF decode error");
 
@@ -484,6 +494,7 @@ ImagePtr Downscale(const ImagePtr& img, int factor)
     out->height = (img->height + factor - 1) / factor;
     out->type = img->type;
     out->hasAlpha = img->hasAlpha;
+    out->straightAlpha = img->straightAlpha;
     out->description = img->description;
     out->fullW = img->fullWidth();
     out->fullH = img->fullHeight();
@@ -524,4 +535,65 @@ bool SamplePixel(const Image& img, int x, int y, float out[4])
     }
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Writing
+
+static void AppendBytes(void* ctx, void* data, int size)
+{
+    static_cast<std::string*>(ctx)->append(static_cast<const char*>(data), size);
+}
+
+std::string EncodePng(const uint8_t* rgb, int width, int height, bool fast)
+{
+    std::string out;
+    stbi_write_png_compression_level = fast ? 1 : 8;
+    stbi_write_png_to_func(AppendBytes, &out, width, height, 3, rgb, width * 3);
+    return out;
+}
+
+bool SaveImageFile(const std::wstring& path, const void* rgb, int width, int height, bool sixteenBit, std::string& err)
+{
+    const std::wstring ext = GetFileExtension(path);
+    const size_t count = size_t(width) * height * 3;
+    if (ext == L".tif" || ext == L".tiff") {
+        TIFF* tif = TIFFOpenW(path.c_str(), "w");
+        if (!tif) { err = "Cannot create the file"; return false; }
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, uint32_t(width));
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, uint32_t(height));
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, uint16_t(3));
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, uint16_t(sixteenBit ? 16 : 8));
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+        TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+        TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_ADOBE_DEFLATE);
+        TIFFSetField(tif, TIFFTAG_PREDICTOR, PREDICTOR_HORIZONTAL);
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, 0));
+        const size_t row = size_t(width) * 3 * (sixteenBit ? 2 : 1);
+        bool ok = true;
+        for (int y = 0; y < height && ok; ++y)
+            ok = TIFFWriteScanline(tif, const_cast<uint8_t*>(static_cast<const uint8_t*>(rgb) + row * y), uint32_t(y)) >= 0;
+        TIFFClose(tif);
+        if (!ok) err = "Cannot write the file";
+        return ok;
+    }
+    std::vector<uint8_t> eight;
+    const uint8_t* px = static_cast<const uint8_t*>(rgb);
+    if (sixteenBit) {
+        eight.resize(count);
+        const uint16_t* w = static_cast<const uint16_t*>(rgb);
+        for (size_t i = 0; i < count; ++i) eight[i] = uint8_t((w[i] + 128) / 257);
+        px = eight.data();
+    }
+    std::string bytes;
+    if (ext == L".png") bytes = EncodePng(px, width, height);
+    else if (ext == L".jpg" || ext == L".jpeg") stbi_write_jpg_to_func(AppendBytes, &bytes, width, height, 3, px, 95);
+    else { err = "Unsupported format (use .png, .jpg or .tif)"; return false; }
+    if (bytes.empty()) { err = "Cannot encode the image"; return false; }
+    FILE* f = _wfopen(path.c_str(), L"wb");
+    if (!f) { err = "Cannot create the file"; return false; }
+    const bool ok = fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    fclose(f);
+    if (!ok) err = "Cannot write the file";
+    return ok;
 }

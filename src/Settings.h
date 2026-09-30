@@ -16,10 +16,16 @@ struct Settings {
     // Last input chosen per (config source, format class), key "source|float" / "source|int".
     std::map<std::string, std::string> inputMemory;
     std::vector<std::string> recentFiles;
+    std::vector<std::string> recentLuts;     // LUT files, most recent first (none is loaded at startup)
+    int lutPosition = 0;                     // LutPosition
+    bool confirmReplace = true;              // ask before another sequence replaces the open one
+    std::string frameSaveDir;                // last folder of "Save frame as"
+    std::string frameSaveExt = ".png";
 
     // Movie export
     int exportCodec = 0, exportQuality = 0, exportScale = 100;
     bool exportHardware = false;
+    bool exportPremultiplied = false;        // ProRes 4444 alpha: premultiplied color
     std::string ffmpegPath;                  // "" = auto-detect
     // Batch conversion
     int batchDest = 0;                       // 0 next to each sequence, 1 folder

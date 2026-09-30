@@ -37,6 +37,7 @@ void App::openBatchDialog()
     m_batchOpt.quality = (ExportQuality)m_settings.exportQuality;
     m_batchOpt.scalePercent = m_settings.exportScale;
     m_batchOpt.hardware = m_settings.exportHardware;
+    m_batchOpt.premultiplied = m_settings.exportPremultiplied;
     m_batchOpt.fps = m_fps;
     m_batchLayer = (hasLayers() && m_layer != m_exrInfo.defaultLayer) ? currentLayerLabel() : std::string();
     m_batchInput = m_color.input;
@@ -84,6 +85,7 @@ void App::startBatch()
     m_settings.exportQuality = (int)m_batchOpt.quality;
     m_settings.exportScale = m_batchOpt.scalePercent;
     m_settings.exportHardware = m_batchOpt.hardware;
+    m_settings.exportPremultiplied = m_batchOpt.premultiplied;
     Log("batch started: %d sequences", (int)m_batch.size());
 }
 
@@ -320,6 +322,10 @@ void App::drawBatchDialog()
             ImGui::TextDisabled("%s / %s  \xC2\xB7  %s", m_color.display.c_str(), m_color.view.c_str(), m_color.sourceLabel().c_str());
         else
             ImGui::TextDisabled("%s", tr(S::ColorOff));
+        if (!m_color.lutPath.empty()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("\xC2\xB7  LUT: %s", ToUtf8(GetFileName(FromUtf8(m_color.lutPath))).c_str());
+        }
 
         row(tr(S::Destination));
         if (ImGui::RadioButton(tr(S::NextToSequence), m_settings.batchDest == 0)) m_settings.batchDest = 0;

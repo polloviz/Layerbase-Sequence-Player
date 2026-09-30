@@ -9,6 +9,8 @@
 enum class ChannelMode : int { RGB = 0, Red, Green, Blue, Alpha, Luma };
 // Cryptomatte presentation (the mask travels in the image alpha).
 enum class MatteMode : int { Off = 0, Ids, Overlay, Masked, Matte };
+// What the color of an image with alpha holds (None: opaque, alpha ignored).
+enum class AlphaMode : int { None = 0, Straight, Premultiplied };
 // How a composite layer combines with the layers below it (scene-linear values).
 enum class BlendMode : int { Normal = 0, Add, Subtract, Multiply, Screen, Count };
 
@@ -19,6 +21,7 @@ struct CompLayer {
     BlendMode blend = BlendMode::Normal;
     float opacity = 1.0f;
     float gain = 1.0f;           // linear multiplier (layer exposure)
+    bool straight = false;       // color not premultiplied by alpha
 };
 
 // Draws the current frame through an OCIO-generated GLSL shader.
@@ -47,6 +50,10 @@ public:
     void setExposure(float stops);
     void setGamma(float gamma);
     void setMatteMode(MatteMode m) { m_matte = m; }
+    // The single image is shown over black and exported with alpha as straight color.
+    void setAlphaMode(AlphaMode m) { m_alpha = m; }
+    // Renders with alpha write premultiplied instead of straight color.
+    void setPremultipliedOutput(bool on) { m_premultOut = on; }
 
     // viewport in framebuffer pixels (origin bottom-left). zoom = screen px per image px.
     void draw(int fbW, int fbH, int vx, int vy, int vw, int vh,
@@ -69,7 +76,7 @@ private:
         std::vector<Uniform> uniforms;
         OCIO::GpuShaderDescRcPtr desc;   // owns the dynamic properties the uniforms read
         int locRect = -1, locImage = -1;
-        int locChannel = -1, locMatte = -1, locOutAlpha = -1;             // display
+        int locChannel = -1, locMatte = -1, locOutAlpha = -1, locAlphaMode = -1;   // display
         int locGain = -1, locOpacity = -1, locMode = -1, locStraight = -1; // composite layer
     };
     struct Tex {
@@ -107,6 +114,8 @@ private:
     void* m_context = nullptr;
 
     MatteMode m_matte = MatteMode::Off;
+    AlphaMode m_alpha = AlphaMode::None;
+    bool m_premultOut = false;
     OCIO::DynamicPropertyDoubleRcPtr m_dynExposure, m_dynGamma;
 
     // Composite

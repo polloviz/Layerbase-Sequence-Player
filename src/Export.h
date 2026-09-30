@@ -16,6 +16,7 @@ struct ExportOptions {
     ExportQuality quality = ExportQuality::High;
     bool hardware = false;        // NVENC for H.264 / H.265
     bool alpha = false;           // ProRes 4444 only: embed alpha (image alpha / Cryptomatte mask)
+    bool premultiplied = false;   // with alpha: color premultiplied by it (default straight)
     int width = 0, height = 0;    // source frame size
     int scalePercent = 100;       // 100 / 50 / 25
     double fps = 30.0;

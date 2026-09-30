@@ -210,7 +210,8 @@ OCIO::GroupTransformRcPtr ColorManager::buildAgxTransform(AgxLook look, const st
         group->appendTransform(enc);
     }
 
-    // 5. Display gamma (dynamic), like the regular pipeline.
+    // 5. LUT on the display output, then display gamma (dynamic), like the regular pipeline.
+    if (auto lut = lutOnDisplay() ? lutTransform() : nullptr) group->appendTransform(lut);
     auto gc = OCIO::ExposureContrastTransform::Create();
     gc->setStyle(OCIO::EXPOSURE_CONTRAST_VIDEO);
     gc->setPivot(1.0);

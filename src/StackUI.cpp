@@ -84,6 +84,7 @@ void App::showFrame(const FrameSetPtr& set)
     m_shownSet = set;
     m_shown = baseImage(set);
     m_viewer.setMatteMode(stackActive() ? MatteMode::Off : m_matte);
+    m_viewer.setAlphaMode(alphaModeFor(m_shown));
 }
 
 ImagePtr App::baseImage(const FrameSetPtr& set) const
@@ -112,6 +113,8 @@ std::vector<CompLayer> App::compLayers(const FrameSetPtr& set) const
         c.blend = s.blend;
         c.opacity = s.opacity;
         c.gain = std::exp2(s.exposure);
+        // Layers of the opened sequence follow its alpha choice; others what their file declares.
+        c.straight = (!s.seq ? alphaModeFor(c.image) : AutoAlphaMode(c.image)) == AlphaMode::Straight;
         out.push_back(c);
     }
     return out;
