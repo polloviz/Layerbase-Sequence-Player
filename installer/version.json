@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
-  "notes_en": "Copy or save the current frame as shown (Ctrl+C / Ctrl+S), show it in Explorer, load LUTs, straight or premultiplied alpha, and a confirmation before replacing the open sequence.",
-  "notes_it": "Copia o salva il frame corrente come lo vedi (Ctrl+C / Ctrl+S), mostralo in Esplora risorse, carica LUT, alpha straight o premoltiplicato e conferma prima di sostituire la sequenza aperta."
+  "notes_en": "Follows a render in progress, versions with Alt+Up / Alt+Down, A/B compare (wipe, side by side, difference), QC checks (NaN, false color, zebra), scopes, guides, metadata panel, frame report, and export crop / black bars with burn-in.",
+  "notes_it": "Segue un render in corso, versioni con Alt+Su / Alt+Giù, confronto A/B (tendina, affiancate, differenza), controlli QC (NaN, falsi colori, zebra), scope, guide, pannello metadati, report dei frame ed export con ritaglio / bande nere e sovrimpressione."
 }
