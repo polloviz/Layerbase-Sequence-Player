@@ -13,6 +13,10 @@ enum class MatteMode : int { Off = 0, Ids, Overlay, Masked, Matte };
 enum class AlphaMode : int { None = 0, Straight, Premultiplied };
 // How a composite layer combines with the layers below it (scene-linear values).
 enum class BlendMode : int { Normal = 0, Add, Subtract, Multiply, Screen, Count };
+// Viewer-only analysis of the pixels (never applied to captures or exports).
+enum class CheckMode : int { Off = 0, BadPixels, FalseColor, Zebra };
+// How the compared sequence B is shown with A.
+enum class CompareMode : int { Wipe = 0, SideBySide, Difference, Toggle, Count };
 
 // One layer of a composite, listed bottom to top.
 struct CompLayer {
@@ -54,6 +58,17 @@ public:
     void setAlphaMode(AlphaMode m) { m_alpha = m; }
     // Renders with alpha write premultiplied instead of straight color.
     void setPremultipliedOutput(bool on) { m_premultOut = on; }
+    void setCheck(CheckMode m) { m_check = m; }
+
+    // A/B compare with the single image: b (null = off) goes through its own display
+    // transform. wipe: split position across the image (0..1); swap: B on the left / shown.
+    void setCompare(const ImagePtr& b, CompareMode mode, float wipe, bool swap, float diffGain, AlphaMode alphaB);
+    bool setProcessorB(const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err);   // null = passthrough
+    void releaseCompare();                        // frees the B programs
+
+    // The viewer source at most maxW pixels wide through the display transform, as RGBA8,
+    // top row first (for scopes).
+    bool renderPreview(int maxW, std::vector<uint8_t>& rgba, int& w, int& h);
 
     // viewport in framebuffer pixels (origin bottom-left). zoom = screen px per image px.
     void draw(int fbW, int fbH, int vx, int vy, int vw, int vh,
@@ -75,8 +90,8 @@ private:
         std::vector<LutTex> luts;
         std::vector<Uniform> uniforms;
         OCIO::GpuShaderDescRcPtr desc;   // owns the dynamic properties the uniforms read
-        int locRect = -1, locImage = -1;
-        int locChannel = -1, locMatte = -1, locOutAlpha = -1, locAlphaMode = -1;   // display
+        int locRect = -1, locImage = -1, locImageB = -1;
+        int locChannel = -1, locMatte = -1, locOutAlpha = -1, locAlphaMode = -1, locCheck = -1;   // display
         int locGain = -1, locOpacity = -1, locMode = -1, locStraight = -1; // composite layer
     };
     struct Tex {
@@ -90,8 +105,16 @@ private:
     bool buildOcioProgram(Program& p, const OCIO::ConstGPUProcessorRcPtr& gpu, const char* function,
                           const char* passthrough, const char* main, std::string& err);
     static void releaseProgram(Program& p);
+    bool buildDisplay(Program& p, const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err,
+                      OCIO::DynamicPropertyDoubleRcPtr& exposure, OCIO::DynamicPropertyDoubleRcPtr& gamma);
     void bindOcio(const Program& p);     // LUT textures (units 1..) and uniforms
-    void drawDisplay(float x0, float y0, float x1, float y1, bool nearest, ChannelMode channel, bool outAlpha, unsigned tex);
+    // matte / alphaMode: the uMatte / uAlphaMode of kFragmentMain; check: CheckMode.
+    void drawDisplay(const Program& p, float x0, float y0, float x1, float y1, bool nearest, ChannelMode channel, bool outAlpha,
+                     unsigned tex, int matte, int alphaMode, int check);
+    int sourceMatte() const;             // the single image's or the composite's
+    int sourceAlpha() const;
+    void drawCompare(int fbW, int fbH, int vx, int vy, int vw, int vh, float zoom, float panX, float panY, ChannelMode channel,
+                     unsigned texA, int texW, int fullW, int fullH);
     void compose();                      // renders the composite when it is out of date
     bool renderSource(bool composite, ChannelMode channel, bool sixteenBit, bool withAlpha, std::vector<uint8_t>& out);
     static unsigned createTexture();
@@ -116,7 +139,22 @@ private:
     MatteMode m_matte = MatteMode::Off;
     AlphaMode m_alpha = AlphaMode::None;
     bool m_premultOut = false;
+    CheckMode m_check = CheckMode::Off;
     OCIO::DynamicPropertyDoubleRcPtr m_dynExposure, m_dynGamma;
+    float m_exposure = 0.0f, m_gamma = 1.0f;
+
+    // A/B compare (built on first use)
+    ImagePtr m_imageB;
+    CompareMode m_cmpMode = CompareMode::Wipe;
+    float m_wipe = 0.5f, m_diffGain = 1.0f;
+    bool m_swap = false;
+    AlphaMode m_alphaB = AlphaMode::None;
+    Program m_displayB, m_diff;
+    OCIO::DynamicPropertyDoubleRcPtr m_dynExposureB, m_dynGammaB;
+
+    // Scope preview target (built on first use)
+    unsigned m_prevFbo = 0, m_prevTex = 0;
+    int m_prevW = 0, m_prevH = 0;
 
     // Composite
     bool m_useComp = false, m_compDirty = false;

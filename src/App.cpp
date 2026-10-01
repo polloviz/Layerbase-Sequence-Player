@@ -121,17 +121,36 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         if (w == L"crypto") m_cryptoPanel = true;
         if (w == L"stack") m_stackPanel = true;
         if (w == L"settings") m_openSettings = true;
+        if (w == L"info") m_infoPanel = true;
+        if (w == L"scopes") m_scopesOpen = true;
+        if (w == L"report" || w == L"reportcheck") m_reportOpen = true;
+        if (w == L"reportcheck") startFrameCheck();
         if (w == L"batch") {
             openBatchDialog();
             batchAddPaths({ GetParentDir(initialPath) + L"\\.." });
         }
     }
     stackTestSetup();
+    // Debug: SP_TEST_COMPARE=<file> (SP_TEST_COMPARE_MODE=0..3), SP_TEST_CHECK=1..3, SP_TEST_GUIDE=<aspect index>,
+    // SP_TEST_VERSION=+1/-1, SP_TEST_OPEN=info|scopes|report|reportcheck.
+    if (const wchar_t* c = _wgetenv(L"SP_TEST_COMPARE")) {
+        setCompare(c);
+        if (const wchar_t* m = _wgetenv(L"SP_TEST_COMPARE_MODE")) m_cmpMode = (CompareMode)std::clamp(_wtoi(m), 0, (int)CompareMode::Count - 1);
+    }
+    if (const wchar_t* c = _wgetenv(L"SP_TEST_CHECK")) m_check = (CheckMode)std::clamp(_wtoi(c), 0, 3);
+    if (const wchar_t* g = _wgetenv(L"SP_TEST_GUIDE")) {
+        m_settings.guideAspect = std::clamp(_wtoi(g), 0, AspectCount() - 1);
+        m_settings.guideSafe = m_settings.guideThirds = m_settings.guideCenter = true;
+    }
+    if (const wchar_t* v = _wgetenv(L"SP_TEST_VERSION")) switchVersion(_wtoi(v));
     if (!opts.batchRoot.empty()) {
         m_batchMode = true;           // settings below are for this run only
         m_quitAfterBatch = true;
         openBatchDialog();
         m_openBatch = false;
+        m_batchOpt.aspect = ParseAspect(opts.aspect);   // only what the command line asks for
+        m_batchOpt.aspectBars = opts.aspectBars;
+        m_batchOpt.burnIn = ParseBurnIn(opts.burnIn, opts.burnText);
         m_settings.batchRecursive = true;
         m_settings.batchSkipExisting = !opts.overwrite;
         m_settings.batchDest = opts.batchOutDir.empty() ? 0 : 1;
@@ -162,12 +181,14 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     Log("first frame presented");
     if (!m_batchMode && m_settings.checkUpdates && std::time(nullptr) - m_settings.lastUpdateCheck >= 24 * 3600)
         startUpdateCheck(false);
+    startWatching();   // after the first frame: live refresh costs nothing at startup
 
     bool quit = false;
     while (!quit) {
         const bool animating = m_playDir != 0 || m_scrubbing || m_renderFrames > 0 || m_exporter || m_batchRunning;
         if (!animating) {
-            const DWORD timeout = m_toastUntil > Now() || _wtoi(_wgetenv(L"SP_DUMP") ? _wgetenv(L"SP_DUMP") : L"0") > 1 ? 100 : INFINITE;
+            const bool poll = m_toastUntil > Now() || m_refreshFirst > 0.0;
+            const DWORD timeout = poll || _wtoi(_wgetenv(L"SP_DUMP") ? _wgetenv(L"SP_DUMP") : L"0") > 1 ? 100 : INFINITE;
             MsgWaitForMultipleObjectsEx(0, nullptr, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             m_renderFrames = 1;
         }
@@ -341,8 +362,12 @@ void App::shutdown()
     if (!m_batchMode) m_settings.save();
 
     m_cache.setOnFrameReady(nullptr);
+    m_watcher.stop();
+    m_frameCheck.reset();
     if (m_seqMutex) CloseHandle(m_seqMutex);
     if (m_logoTex) glDeleteTextures(1, &m_logoTex);
+    for (unsigned* t : { &m_waveTex, &m_vectorTex })
+        if (*t) glDeleteTextures(1, t);
     m_viewer.shutdown();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplWin32_Shutdown();
@@ -411,6 +436,17 @@ long long App::handleMessage(HWND hwnd, unsigned msg, unsigned long long wParam,
     }
     case WM_APP_FRAME_READY:
         return 0;
+    case kDirChangedMsg: {
+        // Wait for a quiet moment: a frame being written sends many notices.
+        const double now = Now();
+        if (m_refreshFirst <= 0.0) m_refreshFirst = now;
+        m_refreshDue = now + 0.4;
+        return 0;
+    }
+    case WM_SYSCOMMAND:
+        // Alt alone would enter the (empty) window menu and swallow the next key (Alt+Up / Down).
+        if ((wParam & 0xFFF0) == SC_KEYMENU && lParam == 0) return 0;
+        break;
     case WM_CLOSE: {
         // Save placement while the window still exists.
         WINDOWPLACEMENT wp{ sizeof(wp) };
@@ -482,6 +518,9 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     m_matteInfo = ExrInfo();
     m_matteFiles.reset();
     m_matteMissing = 0;
+    resetCompare();       // so does the compared sequence
+    m_badImage.reset();
+    m_frameCheck.reset();
     if (!hasCrypto()) { m_matte = MatteMode::Off; m_cryptoPanel = false; }
     // A Cryptomatte-only file (no color channels) would be black: show its IDs.
     if (m_exrInfo.layers.empty() && hasCrypto() && m_matte == MatteMode::Off) { m_matte = MatteMode::Ids; m_cryptoPanel = true; }
@@ -501,6 +540,7 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     claimSequence();
     if (addToRecent) Settings::PushRecent(m_settings.recentFiles, ToUtf8(path));
     updateTitle();
+    if (m_ready) startWatching();   // at startup: once the first frame is up
 }
 
 void App::requestOpen(const std::wstring& path)
@@ -522,6 +562,7 @@ std::vector<const char*> App::workToLose() const
     if (!m_cryptoSel.empty()) w.push_back(tr(S::ReplaceCrypto));
     if (m_matteSeq) w.push_back(tr(S::ReplaceMatte));
     if (m_alphaOverride >= 0) w.push_back(tr(S::ReplaceAlpha));
+    if (compareActive()) w.push_back(tr(S::ReplaceCompare));
     return w;
 }
 
@@ -580,6 +621,8 @@ void App::loadConfig(const std::string& source, bool persist)
         chooseInputForSequence();
     }
     stackRefreshInputs();
+    if (compareActive() && !m_cmpInput.empty() && !m_color.hasColorSpace(m_cmpInput))
+        m_cmpInput = autoInput(m_cmpIsFloat, m_cmpSeq->frames[0].path);
     m_colorDirty = true;
 }
 
@@ -803,6 +846,11 @@ void App::rebuildColorIfNeeded()
         if (!m_viewer.setInputTransforms(procs, err) && m_colorError.empty()) m_colorError = err;
         m_prebuiltGpu.reset();   // built for the single view
     }
+    // A/B compare: B goes through the same view from its own input space.
+    if (compareActive()) {
+        std::string errB;
+        m_viewer.setProcessorB(managed ? m_color.buildGpuProcessor(compareInput()) : m_color.buildLutProcessor(), errB);
+    }
     if (!managed) {
         // Only the LUT, when one is loaded, on the file values.
         const auto lut = m_color.buildLutProcessor();
@@ -844,7 +892,17 @@ void App::handleShortcuts()
     if (ctrl && pressed(ImGuiKey_C)) { defer([this] { copyFrame(); }); return; }
     if (ctrl && pressed(ImGuiKey_S)) { defer([this] { saveFrameDialog(); }); return; }
     if (ctrl && shift && pressed(ImGuiKey_R)) { revealFrame(); return; }
+    if (ctrl && pressed(ImGuiKey_I) && m_seq) {
+        m_infoPanel = !m_infoPanel;
+        if (m_infoPanel) m_cryptoPanel = m_stackPanel = false;
+        return;
+    }
     if (ctrl) return;
+    if (io.KeyAlt) {
+        if (pressed(ImGuiKey_UpArrow)) defer([this] { switchVersion(1); });
+        if (pressed(ImGuiKey_DownArrow)) defer([this] { switchVersion(-1); });
+        return;
+    }
 
     if (pressed(ImGuiKey_Space)) setPlaying(m_playDir != 0 ? 0 : 1);
     if (pressed(ImGuiKey_L)) setPlaying(1);
@@ -874,6 +932,13 @@ void App::handleShortcuts()
     if (pressed(ImGuiKey_RightBracket, true) || pressed(ImGuiKey_Equal, true) || pressed(ImGuiKey_KeypadAdd, true)) m_exposure += 0.5f;
     if (pressed(ImGuiKey_Backspace)) { m_exposure = 0.0f; m_gamma = 1.0f; }
 
+    if (compareActive() && pressed(ImGuiKey_W)) m_cmpMode = CompareMode(((int)m_cmpMode + 1) % (int)CompareMode::Count);
+    if (compareActive() && pressed(ImGuiKey_X)) m_cmpSwap = !m_cmpSwap;
+    if (pressed(ImGuiKey_N)) setCheck(CheckMode::BadPixels);
+    if (pressed(ImGuiKey_E)) setCheck(CheckMode::FalseColor);
+    if (pressed(ImGuiKey_Z)) setCheck(CheckMode::Zebra);
+    if (pressed(ImGuiKey_H) && m_seq) m_scopesOpen = !m_scopesOpen;
+
     if (pressed(ImGuiKey_Tab)) m_uiVisible = !m_uiVisible;
     if (pressed(ImGuiKey_F11) || pressed(ImGuiKey_Enter)) defer([this] { toggleFullscreen(); });
     if (pressed(ImGuiKey_Escape) && m_fullscreen) defer([this] { toggleFullscreen(); });
@@ -884,18 +949,39 @@ void App::handleViewerInput(float vx, float vy, float vw, float vh)
     ImGuiIO& io = ImGui::GetIO();
     const ImagePtr& img = m_shown;
     const int imgW = img && img->valid() ? img->fullWidth() : 0, imgH = img && img->valid() ? img->fullHeight() : 0;
+    const bool sbs = sideBySide();
+    const float hw = std::floor(vw / 2);   // side by side: each image gets half of the viewer
 
     if (m_fit && imgW > 0) {
-        m_zoom = std::min(vw / imgW, vh / imgH);
+        m_zoom = std::min((sbs ? hw : vw) / imgW, vh / imgH);
         m_panX = m_panY = 0;
     }
 
     const ImVec2 m = io.MousePos;
     const bool inside = m.x >= vx && m.x < vx + vw && m.y >= vy && m.y < vy + vh;
     const bool free = !io.WantCaptureMouse;
+    const int half = sbs ? (m.x >= vx + hw ? 1 : 0) : -1;
+
+    // A/B wipe: dragging the line moves the split instead of panning.
+    const bool wipe = compareActive() && m_cmpMode == CompareMode::Wipe && imgW > 0;
+    if (wipe) {
+        const ScreenRect r = imageRect(vx, vy, vw, vh);
+        const float split = std::floor(r.x0 + (r.x1 - r.x0) * m_wipe);
+        const bool onLine = inside && std::fabs(m.x - split) <= 6.0f * m_dpiScale;
+        if (free && onLine) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        if (free && onLine && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) m_wipeDrag = true;
+        if (m_wipeDrag) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            if (r.x1 > r.x0) m_wipe = std::clamp((m.x - r.x0) / (r.x1 - r.x0), 0.0f, 1.0f);
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) m_wipeDrag = false;
+        }
+    } else {
+        m_wipeDrag = false;
+    }
 
     // Pan/zoom are kept in "screen, y up" space relative to viewport center.
-    const float px = m.x - (vx + vw * 0.5f);
+    const float centerX = half < 0 ? vx + vw * 0.5f : half ? vx + hw + (vw - hw) * 0.5f : vx + hw * 0.5f;
+    const float px = m.x - centerX;
     const float py = (vy + vh * 0.5f) - m.y;
 
     if (free && inside && io.MouseWheel != 0.0f && imgW > 0) {
@@ -906,37 +992,53 @@ void App::handleViewerInput(float vx, float vy, float vw, float vh)
         m_zoom = newZoom;
         m_fit = false;
     }
-    if (free && inside && (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 1.0f))) {
+    if (free && inside && !m_wipeDrag &&
+        (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 1.0f))) {
         m_panX += io.MouseDelta.x;
         m_panY -= io.MouseDelta.y;
         if (io.MouseDelta.x != 0 || io.MouseDelta.y != 0) m_fit = false;
     }
-    const bool cryptoPicking = m_matte != MatteMode::Off && hasCrypto();
-    if (free && inside && !cryptoPicking && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) defer([this] { toggleFullscreen(); });
+
+    // Which image is under the cursor: A, or B in the compare modes that show it there.
+    m_hoverB = false;
+    if (compareActive()) {
+        switch (m_cmpMode) {
+        case CompareMode::Toggle: m_hoverB = m_cmpSwap; break;
+        case CompareMode::SideBySide: m_hoverB = (half == 1) != m_cmpSwap; break;
+        case CompareMode::Wipe: {
+            const ScreenRect r = imageRect(vx, vy, vw, vh);
+            m_hoverB = (m.x >= std::floor(r.x0 + (r.x1 - r.x0) * m_wipe)) != m_cmpSwap;
+            break;
+        }
+        default: break;
+        }
+    }
+    const bool cryptoPicking = m_matte != MatteMode::Off && hasCrypto() && !m_hoverB;
+    if (free && inside && !cryptoPicking && !m_wipeDrag && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) defer([this] { toggleFullscreen(); });
 
     // Pixel under cursor (matches GLViewer::draw placement).
     m_hoverValid = false;
     if (inside && imgW > 0) {
-        const float w = imgW * m_zoom, h = imgH * m_zoom;
-        const float left = std::floor(vw * 0.5f + m_panX - w * 0.5f);
-        const float bottom = std::floor(vh * 0.5f + m_panY - h * 0.5f);
-        const float top = bottom + h;
-        const float lx = m.x - vx, ly = vh - (m.y - vy);   // y up inside viewport
-        const int ix = (int)std::floor((lx - left) / m_zoom);
-        const int iy = (int)std::floor((top - ly) / m_zoom);
-        // File values of the image, or of the selected stack layer; mapped when that was
-        // decoded smaller (proxy) or has another resolution.
+        const ScreenRect r = imageRect(vx, vy, vw, vh, half);
+        const int ix = (int)std::floor((m.x - r.x0) / m_zoom);
+        const int iy = (int)std::floor((m.y - r.y0) / m_zoom);
+        // File values of the image, or of the selected stack layer, or of B; mapped when that
+        // was decoded smaller (proxy) or has another resolution.
         ImagePtr src = img;
         if (stackActive()) {
             const StackLayer& s = m_stack[std::clamp(m_stackSel, 0, (int)m_stack.size() - 1)];
             src = m_shownSet ? m_shownSet->find(s.key) : nullptr;
             m_hoverLayer = s.name;
+        } else if (m_hoverB) {
+            src = compareImage(m_shownSet);
+            m_hoverLayer = "B";
         }
         if (ix >= 0 && iy >= 0 && ix < imgW && iy < imgH) {
             m_hoverValid = true;
             m_hoverX = ix;
             m_hoverY = iy;
-            if (!src || !SamplePixel(*src, int(int64_t(ix) * src->width / imgW), int(int64_t(iy) * src->height / imgH), m_hoverRGBA))
+            if (!src || !src->valid() ||
+                !SamplePixel(*src, int(int64_t(ix) * src->width / imgW), int(int64_t(iy) * src->height / imgH), m_hoverRGBA))
                 std::fill(std::begin(m_hoverRGBA), std::end(m_hoverRGBA), 0.0f);
         }
     }
@@ -974,6 +1076,7 @@ void App::frame()
     if (m_inFrame) return;
     m_inFrame = true;
     wglMakeCurrent(m_hdc, m_glrc);
+    if (m_refreshFirst > 0.0 && (Now() >= m_refreshDue || Now() - m_refreshFirst > 1.5)) refreshSequence();
     rebuildColorIfNeeded();
     m_viewer.setExposure(m_exposure);
     m_viewer.setGamma(m_gamma);
@@ -983,6 +1086,11 @@ void App::frame()
     const double viewerStart = Now();
     if (stackActive() && m_shown) m_viewer.setComposite(compLayers(m_shownSet), m_shown->width, m_shown->height, m_shown->fullWidth(), m_shown->fullHeight());
     else m_viewer.setImage(m_shown);
+    const ImagePtr imageB = compareImage(m_shownSet);
+    m_viewer.setCompare(imageB, m_cmpMode, m_wipe, m_cmpSwap, m_diffGain, AutoAlphaMode(imageB));
+    m_viewer.setCheck(m_check);
+    updateScopes();
+    countBadPixels();
     double viewerMs = (Now() - viewerStart) * 1000.0;
     // While playing, the next frame is uploaded in the background as this one shows
     // (from the second frame on: the uploader starts then, off the startup path).
@@ -993,6 +1101,7 @@ void App::frame()
         if (const FrameSetPtr set = next >= 0 ? m_cache.get(next) : nullptr) {
             if (!stackActive()) upcoming.push_back(set->images[0]);
             else for (const CompLayer& l : compLayers(set)) upcoming.push_back(l.image);
+            if (const ImagePtr b = compareImage(set)) upcoming.push_back(b);
         }
     }
     m_viewer.prefetch(upcoming);

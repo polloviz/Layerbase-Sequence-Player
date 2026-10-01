@@ -26,8 +26,36 @@ uniform int uChannel;
 uniform int uMatte;     // 0 off, 1 ID colors, 2 overlay, 3 masked, 4 matte (mask in alpha)
 uniform int uOutAlpha;  // 0 opaque, 1 alpha with straight color, 2 alpha with premultiplied color (export)
 uniform int uAlphaMode; // 0 opaque or mask in alpha, 1 straight color, 2 premultiplied color
+uniform int uCheck;     // viewer only: 0 off, 1 NaN/Inf/negative, 2 false color, 3 zebra
+const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
+// Bands of display luminance: crushed, shadows, mid grey, highlights, clipped.
+vec3 FalseColor(float y) {
+    if (y < 0.02) return vec3(0.45, 0.0, 0.6);
+    if (y < 0.10) return vec3(0.1, 0.3, 1.0);
+    if (y < 0.40) return vec3(y);
+    if (y < 0.50) return vec3(0.2, 0.8, 0.25);
+    if (y < 0.85) return vec3(y);
+    if (y < 0.97) return vec3(1.0, 0.85, 0.1);
+    return vec3(1.0, 0.1, 0.1);
+}
+vec3 Check(vec3 c, bool negative) {
+    if (uCheck == 1) return negative ? vec3(0.0, 0.85, 1.0) : vec3(dot(c, kLuma) * 0.55);
+    if (uCheck == 2) return FalseColor(dot(clamp(c, 0.0, 1.0), kLuma));
+    if (uCheck == 3) {
+        float stripe = mod(floor((gl_FragCoord.x + gl_FragCoord.y) / 6.0), 2.0);
+        float m = max(c.r, max(c.g, c.b));
+        if (m >= 0.99) return mix(c, stripe > 0.5 ? vec3(1.0, 0.15, 0.15) : vec3(0.0), 0.8);
+        if (m <= 0.005 && stripe > 0.5) return vec3(0.1, 0.35, 1.0);
+    }
+    return c;
+}
 void main() {
     vec4 src = texture(uImage, vUV);
+    bool negative = false;
+    if (uCheck == 1) {
+        if (any(isnan(src)) || any(isinf(src))) { fragColor = vec4(1.0, 0.0, 1.0, 1.0); return; }
+        negative = any(lessThan(src.rgb, vec3(0.0)));
+    }
     float a = src.a;
     // Shown over black; with alpha the view runs on straight color (premultiplied after it).
     if (uOutAlpha != 0) { if (uAlphaMode == 2 && a > 0.0) src.rgb /= a; }
@@ -45,8 +73,29 @@ void main() {
     if (uChannel == 1) c.rgb = c.rrr;
     else if (uChannel == 2) c.rgb = c.ggg;
     else if (uChannel == 3) c.rgb = c.bbb;
-    else if (uChannel == 5) c.rgb = vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)));
+    else if (uChannel == 5) c.rgb = vec3(dot(c.rgb, kLuma));
+    if (uCheck != 0) c.rgb = Check(c.rgb, negative);
     fragColor = vec4(uOutAlpha == 2 ? c.rgb * a : c.rgb, uOutAlpha != 0 ? a : 1.0);
+}
+)";
+
+// A/B difference of the file values, amplified; no color transform.
+static const char* kDiffMain = R"(#version 400 core
+in vec2 vUV;
+out vec4 fragColor;
+uniform sampler2D uImage;
+uniform sampler2D uImageB;
+uniform float uGain;
+uniform int uChannel;
+void main() {
+    vec4 d = abs(texture(uImage, vUV) - texture(uImageB, vUV)) * uGain;
+    vec3 c = d.rgb;
+    if (uChannel == 1) c = d.rrr;
+    else if (uChannel == 2) c = d.ggg;
+    else if (uChannel == 3) c = d.bbb;
+    else if (uChannel == 4) c = d.aaa;
+    else if (uChannel == 5) c = vec3(dot(d.rgb, vec3(0.2126, 0.7152, 0.0722)));
+    fragColor = vec4(c, 1.0);
 }
 )";
 
@@ -149,15 +198,25 @@ void GLViewer::shutdown()
     for (auto& t : m_pool) glDeleteTextures(1, &t.id);
     m_pool.clear();
     releaseProgram(m_display);
+    releaseCompare();
     for (auto& p : m_inputs) releaseProgram(p);
     m_inputs.clear();
-    for (unsigned* t : { &m_fboTex, &m_compTex })
+    for (unsigned* t : { &m_fboTex, &m_compTex, &m_prevTex })
         if (*t) glDeleteTextures(1, t);
-    for (unsigned* f : { &m_fbo, &m_compFbo })
+    for (unsigned* f : { &m_fbo, &m_compFbo, &m_prevFbo })
         if (*f) glDeleteFramebuffers(1, f);
     if (m_vbo) glDeleteBuffers(1, &m_vbo);
     if (m_vao) glDeleteVertexArrays(1, &m_vao);
-    m_fbo = m_fboTex = m_compFbo = m_compTex = m_vbo = m_vao = 0;
+    m_fbo = m_fboTex = m_compFbo = m_compTex = m_prevFbo = m_prevTex = m_vbo = m_vao = 0;
+}
+
+void GLViewer::releaseCompare()
+{
+    releaseProgram(m_displayB);
+    releaseProgram(m_diff);
+    m_dynExposureB.reset();
+    m_dynGammaB.reset();
+    m_imageB.reset();
 }
 
 void GLViewer::releaseProgram(Program& p)
@@ -257,6 +316,7 @@ bool GLViewer::buildOcioProgram(Program& p, const OCIO::ConstGPUProcessorRcPtr& 
     p.locMatte = glGetUniformLocation(p.id, "uMatte");
     p.locOutAlpha = glGetUniformLocation(p.id, "uOutAlpha");
     p.locAlphaMode = glGetUniformLocation(p.id, "uAlphaMode");
+    p.locCheck = glGetUniformLocation(p.id, "uCheck");
     p.locGain = glGetUniformLocation(p.id, "uGain");
     p.locOpacity = glGetUniformLocation(p.id, "uOpacity");
     p.locMode = glGetUniformLocation(p.id, "uMode");
@@ -264,26 +324,49 @@ bool GLViewer::buildOcioProgram(Program& p, const OCIO::ConstGPUProcessorRcPtr& 
     return true;
 }
 
-bool GLViewer::setProcessor(const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err)
+bool GLViewer::buildDisplay(Program& prog, const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err,
+                            OCIO::DynamicPropertyDoubleRcPtr& exposure, OCIO::DynamicPropertyDoubleRcPtr& gamma)
 {
-    m_dynExposure.reset();
-    m_dynGamma.reset();
-    if (!buildOcioProgram(m_display, gpu, "OCIODisplay", kPassthrough, kFragmentMain, err)) {
+    exposure.reset();
+    gamma.reset();
+    if (!buildOcioProgram(prog, gpu, "OCIODisplay", kPassthrough, kFragmentMain, err)) {
         std::string dummy;
-        buildOcioProgram(m_display, nullptr, "OCIODisplay", kPassthrough, kFragmentMain, dummy);
+        buildOcioProgram(prog, nullptr, "OCIODisplay", kPassthrough, kFragmentMain, dummy);
         return false;
     }
-    if (const auto& desc = m_display.desc) {
+    if (const auto& desc = prog.desc) {
         if (desc->hasDynamicProperty(OCIO::DYNAMIC_PROPERTY_EXPOSURE)) {
             auto p = desc->getDynamicProperty(OCIO::DYNAMIC_PROPERTY_EXPOSURE);
-            m_dynExposure = OCIO::DynamicPropertyValue::AsDouble(p);
+            exposure = OCIO::DynamicPropertyValue::AsDouble(p);
         }
         if (desc->hasDynamicProperty(OCIO::DYNAMIC_PROPERTY_GAMMA)) {
             auto p = desc->getDynamicProperty(OCIO::DYNAMIC_PROPERTY_GAMMA);
-            m_dynGamma = OCIO::DynamicPropertyValue::AsDouble(p);
+            gamma = OCIO::DynamicPropertyValue::AsDouble(p);
         }
     }
+    setExposure(m_exposure);
+    setGamma(m_gamma);
     return true;
+}
+
+bool GLViewer::setProcessor(const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err)
+{
+    return buildDisplay(m_display, gpu, err, m_dynExposure, m_dynGamma);
+}
+
+bool GLViewer::setProcessorB(const OCIO::ConstGPUProcessorRcPtr& gpu, std::string& err)
+{
+    return buildDisplay(m_displayB, gpu, err, m_dynExposureB, m_dynGammaB);
+}
+
+void GLViewer::setCompare(const ImagePtr& b, CompareMode mode, float wipe, bool swap, float diffGain, AlphaMode alphaB)
+{
+    m_imageB = b;
+    m_cmpMode = mode;
+    m_wipe = std::clamp(wipe, 0.0f, 1.0f);
+    m_swap = swap;
+    m_diffGain = diffGain;
+    m_alphaB = alphaB;
 }
 
 bool GLViewer::setInputTransforms(const std::vector<OCIO::ConstGPUProcessorRcPtr>& procs, std::string& err)
@@ -303,13 +386,17 @@ bool GLViewer::setInputTransforms(const std::vector<OCIO::ConstGPUProcessorRcPtr
 
 void GLViewer::setExposure(float stops)
 {
+    m_exposure = stops;
     if (m_dynExposure) m_dynExposure->setValue(stops);
+    if (m_dynExposureB) m_dynExposureB->setValue(stops);
 }
 
 void GLViewer::setGamma(float gamma)
 {
     // ExposureContrast raises to the power of `gamma`; UI gamma > 1 should brighten.
+    m_gamma = gamma;
     if (m_dynGamma) m_dynGamma->setValue(1.0 / std::max(0.01f, gamma));
+    if (m_dynGammaB) m_dynGammaB->setValue(1.0 / std::max(0.01f, gamma));
 }
 
 void GLViewer::setImage(const ImagePtr& img)
@@ -344,7 +431,7 @@ bool GLViewer::needed(const Tex& t) const
     if (m_useComp) {
         for (const CompLayer& l : m_comp)
             if (l.image == t.image) return true;
-    } else if (t.image == m_image) {
+    } else if (t.image == m_image || t.image == m_imageB) {
         return true;
     }
     return std::find(m_prefetch.begin(), m_prefetch.end(), t.image) != m_prefetch.end();
@@ -560,20 +647,126 @@ void GLViewer::draw(int fbW, int fbH, int vx, int vy, int vw, int vh,
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (tex && texW > 0 && fullW > 0 && m_display.id) {
-        const float w = fullW * zoom, h = fullH * zoom;
-        const float cx = vx + vw * 0.5f + panX, cy = vy + vh * 0.5f + panY;
-        // Snap to whole pixels for crisp 1:1 display; a proxy is always filtered.
-        const float x0 = std::floor(cx - w * 0.5f), y0 = std::floor(cy - h * 0.5f);
-        const float x1 = x0 + w, y1 = y0 + h;
-        const bool nearest = zoom >= 1.0f && texW == fullW;
-        drawDisplay(x0 / fbW * 2 - 1, y0 / fbH * 2 - 1, x1 / fbW * 2 - 1, y1 / fbH * 2 - 1, nearest, channel, false, tex);
+        if (m_imageB && !m_useComp) {
+            drawCompare(fbW, fbH, vx, vy, vw, vh, zoom, panX, panY, channel, tex, texW, fullW, fullH);
+        } else {
+            const float w = fullW * zoom, h = fullH * zoom;
+            const float cx = vx + vw * 0.5f + panX, cy = vy + vh * 0.5f + panY;
+            // Snap to whole pixels for crisp 1:1 display; a proxy is always filtered.
+            const float x0 = std::floor(cx - w * 0.5f), y0 = std::floor(cy - h * 0.5f);
+            const float x1 = x0 + w, y1 = y0 + h;
+            const bool nearest = zoom >= 1.0f && texW == fullW;
+            drawDisplay(m_display, x0 / fbW * 2 - 1, y0 / fbH * 2 - 1, x1 / fbW * 2 - 1, y1 / fbH * 2 - 1, nearest, channel, false, tex,
+                        sourceMatte(), sourceAlpha(), (int)m_check);
+        }
     }
     glDisable(GL_SCISSOR_TEST);
 }
 
-void GLViewer::drawDisplay(float x0, float y0, float x1, float y1, bool nearest, ChannelMode channel, bool outAlpha, unsigned tex)
+// A and B share the placement (B is stretched over A's size). Wipe: A left of the split, B
+// right; side by side: each in half of the viewport; swap exchanges them.
+void GLViewer::drawCompare(int fbW, int fbH, int vx, int vy, int vw, int vh, float zoom, float panX, float panY, ChannelMode channel,
+                           unsigned texA, int texW, int fullW, int fullH)
 {
-    const Program& p = m_display;
+    const unsigned texB = m_imageB->valid() ? texture(m_imageB) : 0;
+    const bool readyB = texB && (m_displayB.id || m_cmpMode == CompareMode::Difference);
+    auto rect = [&](int ax, int aw, float r[4]) {
+        const float w = fullW * zoom, h = fullH * zoom;
+        const float cx = ax + aw * 0.5f + panX, cy = vy + vh * 0.5f + panY;
+        r[0] = std::floor(cx - w * 0.5f);
+        r[1] = std::floor(cy - h * 0.5f);
+        r[2] = r[0] + w;
+        r[3] = r[1] + h;
+    };
+    auto drawOne = [&](bool b, const float r[4]) {
+        if (b && !readyB) return;   // B frame missing: the background shows
+        const bool nearest = zoom >= 1.0f && (b ? m_imageB->width == m_imageB->fullWidth() && m_imageB->width == fullW : texW == fullW);
+        drawDisplay(b ? m_displayB : m_display, r[0] / fbW * 2 - 1, r[1] / fbH * 2 - 1, r[2] / fbW * 2 - 1, r[3] / fbH * 2 - 1, nearest,
+                    channel, false, b ? texB : texA, b ? 0 : sourceMatte(), b ? (int)m_alphaB : sourceAlpha(), (int)m_check);
+    };
+    auto scissor = [&](float x0, float x1) {
+        const int a = std::clamp((int)x0, vx, vx + vw), b = std::clamp((int)x1, vx, vx + vw);
+        glScissor(a, vy, b - a, vh);
+    };
+
+    float r[4];
+    switch (m_cmpMode) {
+    case CompareMode::Toggle:
+        rect(vx, vw, r);
+        drawOne(m_swap, r);
+        break;
+    case CompareMode::SideBySide: {
+        const int half = vw / 2;
+        rect(vx, half, r);
+        scissor((float)vx, float(vx + half));
+        drawOne(m_swap, r);
+        rect(vx + half, vw - half, r);
+        scissor(float(vx + half), float(vx + vw));
+        drawOne(!m_swap, r);
+        break;
+    }
+    case CompareMode::Difference: {
+        if (!readyB) break;
+        if (!m_diff.id) {
+            std::string err;
+            m_diff.id = Link(kDiffMain, err);
+            if (!m_diff.id) break;
+            m_diff.locRect = glGetUniformLocation(m_diff.id, "uRect");
+            m_diff.locImage = glGetUniformLocation(m_diff.id, "uImage");
+            m_diff.locImageB = glGetUniformLocation(m_diff.id, "uImageB");
+            m_diff.locGain = glGetUniformLocation(m_diff.id, "uGain");
+            m_diff.locChannel = glGetUniformLocation(m_diff.id, "uChannel");
+        }
+        rect(vx, vw, r);
+        glDisable(GL_BLEND);
+        glUseProgram(m_diff.id);
+        glUniform4f(m_diff.locRect, r[0] / fbW * 2 - 1, r[1] / fbH * 2 - 1, r[2] / fbW * 2 - 1, r[3] / fbH * 2 - 1);
+        glUniform1i(m_diff.locImage, 0);
+        glUniform1i(m_diff.locImageB, 1);
+        glUniform1f(m_diff.locGain, m_diffGain);
+        glUniform1i(m_diff.locChannel, (int)channel);
+        const GLint filter = zoom >= 1.0f && texW == fullW ? GL_NEAREST : GL_LINEAR;
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, texB);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texA);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+        glBindVertexArray(m_vao);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(0);
+        glUseProgram(0);
+        break;
+    }
+    default: {   // wipe
+        rect(vx, vw, r);
+        const float split = std::floor(r[0] + (r[2] - r[0]) * m_wipe);
+        scissor((float)vx, split);
+        drawOne(m_swap, r);
+        scissor(split, float(vx + vw));
+        drawOne(!m_swap, r);
+        break;
+    }
+    }
+    glScissor(vx, vy, vw, vh);
+}
+
+int GLViewer::sourceMatte() const
+{
+    return m_useComp ? 0 : (int)m_matte;
+}
+
+int GLViewer::sourceAlpha() const
+{
+    // The composite is premultiplied; a Cryptomatte mask replaces the image alpha.
+    return m_useComp ? (int)AlphaMode::Premultiplied : m_matte != MatteMode::Off ? 0 : (int)m_alpha;
+}
+
+void GLViewer::drawDisplay(const Program& p, float x0, float y0, float x1, float y1, bool nearest, ChannelMode channel, bool outAlpha,
+                           unsigned tex, int matte, int alphaMode, int check)
+{
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -581,10 +774,10 @@ void GLViewer::drawDisplay(float x0, float y0, float x1, float y1, bool nearest,
     glUniform4f(p.locRect, x0, y0, x1, y1);
     glUniform1i(p.locImage, 0);
     glUniform1i(p.locChannel, (int)channel);
-    glUniform1i(p.locMatte, m_useComp ? 0 : (int)m_matte);
+    glUniform1i(p.locMatte, matte);
     glUniform1i(p.locOutAlpha, !outAlpha ? 0 : m_premultOut ? 2 : 1);
-    // The composite is premultiplied; a Cryptomatte mask replaces the image alpha.
-    glUniform1i(p.locAlphaMode, m_useComp ? (int)AlphaMode::Premultiplied : m_matte != MatteMode::Off ? 0 : (int)m_alpha);
+    glUniform1i(p.locAlphaMode, alphaMode);
+    glUniform1i(p.locCheck, check);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
@@ -640,12 +833,50 @@ bool GLViewer::renderSource(bool composite, ChannelMode channel, bool sixteenBit
     glViewport(0, 0, w, h);
     glDisable(GL_SCISSOR_TEST);
     // Image top row lands in framebuffer row 0, so glReadPixels returns top-down rows.
-    drawDisplay(-1.0f, 1.0f, 1.0f, -1.0f, true, channel, withAlpha, tex);
+    drawDisplay(m_display, -1.0f, 1.0f, 1.0f, -1.0f, true, channel, withAlpha, tex, sourceMatte(), sourceAlpha(), 0);
 
     const int comps = withAlpha ? 4 : 3;
     out.resize(size_t(w) * h * comps * (sixteenBit ? 2 : 1));
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, w, h, withAlpha ? GL_RGBA : GL_RGB, sixteenBit ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE, out.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return true;
+}
+
+bool GLViewer::renderPreview(int maxW, std::vector<uint8_t>& rgba, int& w, int& h)
+{
+    unsigned tex = 0;
+    int srcW = 0, srcH = 0;
+    if (m_useComp) {
+        compose();
+        tex = m_compTex;
+        srcW = m_compW;
+        srcH = m_compH;
+    } else if (m_image && m_image->valid()) {
+        tex = texture(m_image);
+        srcW = m_image->width;
+        srcH = m_image->height;
+    }
+    if (!tex || srcW <= 0 || srcH <= 0 || !m_display.id) return false;
+    w = std::min(maxW, srcW);
+    h = std::max(1, (int)std::lround(double(srcH) * w / srcW));
+    if (!m_prevFbo || m_prevW != w || m_prevH != h) {
+        if (!m_prevFbo) glGenFramebuffers(1, &m_prevFbo);
+        if (m_prevTex) glDeleteTextures(1, &m_prevTex);
+        m_prevTex = createTexture();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_prevFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_prevTex, 0);
+        m_prevW = w;
+        m_prevH = h;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, m_prevFbo);
+    glViewport(0, 0, w, h);
+    glDisable(GL_SCISSOR_TEST);
+    drawDisplay(m_display, -1.0f, 1.0f, 1.0f, -1.0f, false, ChannelMode::RGB, false, tex, sourceMatte(), sourceAlpha(), 0);
+    rgba.resize(size_t(w) * h * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return true;
 }

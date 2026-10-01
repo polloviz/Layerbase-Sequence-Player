@@ -49,6 +49,10 @@ public:
     ~FrameCache();
 
     void setSequence(std::shared_ptr<const Sequence> seq);
+    // The sequence changed on disk: frame i of the old one is frame from[i] of the new one
+    // (-1 = gone or rewritten). Decoded frames move along; frames with errors are dropped so
+    // they are decoded again.
+    void remap(std::shared_ptr<const Sequence> seq, const std::vector<int>& from);
     void setBudget(size_t bytes);
     // Changes what is decoded. Layers whose key is still planned are kept, so adding a
     // layer decodes only that layer.

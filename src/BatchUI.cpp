@@ -38,6 +38,10 @@ void App::openBatchDialog()
     m_batchOpt.scalePercent = m_settings.exportScale;
     m_batchOpt.hardware = m_settings.exportHardware;
     m_batchOpt.premultiplied = m_settings.exportPremultiplied;
+    m_batchOpt.aspect = m_settings.exportAspect;
+    m_batchOpt.aspectBars = m_settings.exportAspectBars;
+    m_batchOpt.burnIn = { m_settings.burnIn, m_settings.burnName, m_settings.burnFrame, m_settings.burnTimecode, m_settings.burnDate,
+                          m_settings.burnText };
     m_batchOpt.fps = m_fps;
     m_batchLayer = (hasLayers() && m_layer != m_exrInfo.defaultLayer) ? currentLayerLabel() : std::string();
     m_batchInput = m_color.input;

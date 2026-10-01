@@ -21,11 +21,19 @@ struct Settings {
     bool confirmReplace = true;              // ask before another sequence replaces the open one
     std::string frameSaveDir;                // last folder of "Save frame as"
     std::string frameSaveExt = ".png";
+    bool liveRefresh = true;                 // follow the folder of the open sequence while it renders
+    // Viewer guides
+    int guideAspect = 0;                     // AspectRatio index; 0 = none
+    bool guideSafe = false, guideCenter = false, guideThirds = false;
 
     // Movie export
     int exportCodec = 0, exportQuality = 0, exportScale = 100;
     bool exportHardware = false;
     bool exportPremultiplied = false;        // ProRes 4444 alpha: premultiplied color
+    int exportAspect = 0;                    // AspectRatio index; 0 = full frame
+    bool exportAspectBars = false;
+    bool burnIn = false, burnName = true, burnFrame = true, burnTimecode = false, burnDate = false;
+    std::string burnText;
     std::string ffmpegPath;                  // "" = auto-detect
     // Batch conversion
     int batchDest = 0;                       // 0 next to each sequence, 1 folder

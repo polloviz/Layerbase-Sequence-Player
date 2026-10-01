@@ -124,6 +124,29 @@ void FrameCache::setSequence(std::shared_ptr<const Sequence> seq)
     m_cv.notify_all();
 }
 
+void FrameCache::remap(std::shared_ptr<const Sequence> seq, const std::vector<int>& from)
+{
+    {
+        std::lock_guard lock(m_mutex);
+        m_seq = std::move(seq);
+        ++m_generation;
+        m_inflight.clear();
+        std::unordered_map<int, FrameSetPtr> frames;
+        m_used = 0;
+        for (auto& [i, set] : m_frames) {
+            const int to = i >= 0 && i < (int)from.size() ? from[i] : -1;
+            if (to < 0 || !set->complete() || !AllValid(set->images)) continue;
+            m_used += set->bytes;
+            frames[to] = std::move(set);
+        }
+        m_frames = std::move(frames);
+        m_rangeEnd = std::min(m_rangeEnd, m_seq ? std::max(0, m_seq->count() - 1) : 0);
+        m_rangeStart = std::min(m_rangeStart, m_rangeEnd);
+        m_playhead = std::clamp(m_playhead, m_rangeStart, m_rangeEnd);
+    }
+    m_cv.notify_all();
+}
+
 void FrameCache::setOnFrameReady(std::function<void()> fn)
 {
     std::lock_guard lock(m_mutex);

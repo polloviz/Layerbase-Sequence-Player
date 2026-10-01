@@ -78,6 +78,10 @@ void App::openExportDialog()
     m_exportOpt.scalePercent = m_settings.exportScale;
     m_exportOpt.hardware = m_settings.exportHardware;
     m_exportOpt.premultiplied = m_settings.exportPremultiplied;
+    m_exportOpt.aspect = m_settings.exportAspect;
+    m_exportOpt.aspectBars = m_settings.exportAspectBars;
+    m_exportOpt.burnIn = { m_settings.burnIn, m_settings.burnName, m_settings.burnFrame, m_settings.burnTimecode, m_settings.burnDate,
+                           m_settings.burnText };
     m_exportOpt.fps = m_fps;
     m_exportOpt.width = m_shown->fullWidth();   // exports decode at full resolution
     m_exportOpt.height = m_shown->fullHeight();
@@ -94,7 +98,18 @@ void App::startExport()
     m_settings.exportQuality = (int)m_exportOpt.quality;
     m_settings.exportScale = m_exportOpt.scalePercent;
     m_settings.exportHardware = m_exportOpt.hardware;
-    if (!m_batchMode) m_settings.exportPremultiplied = m_exportOpt.premultiplied;
+    if (!m_batchMode) {
+        m_settings.exportPremultiplied = m_exportOpt.premultiplied;
+        m_settings.exportAspect = m_exportOpt.aspect;
+        m_settings.exportAspectBars = m_exportOpt.aspectBars;
+        const BurnInOptions& b = m_exportOpt.burnIn;
+        m_settings.burnIn = b.enabled;
+        m_settings.burnName = b.name;
+        m_settings.burnFrame = b.frame;
+        m_settings.burnTimecode = b.timecode;
+        m_settings.burnDate = b.date;
+        m_settings.burnText = b.text;
+    }
 
     auto exporter = std::make_unique<MovieExporter>();
     std::string err;
@@ -127,6 +142,9 @@ void App::processExport()
         };
         openExportDialog();
         m_openExport = false;
+        m_exportOpt.aspect = ParseAspect(m_cliExport.aspect);   // only what the command line asks for
+        m_exportOpt.aspectBars = m_cliExport.aspectBars;
+        m_exportOpt.burnIn = ParseBurnIn(m_cliExport.burnIn, m_cliExport.burnText);
         m_exportOpt.outputPath = m_cliExport.exportPath;
         m_exportOpt.hardware = m_cliExport.exportHardware;
         m_exportOpt.alpha = m_cliExport.exportAlpha;
@@ -205,6 +223,7 @@ void App::processExport()
             finishExport(false, "GPU render", true);
             return;
         }
+        frameExport(buf, img->width, img->height, m_exportNext);
         m_exporter->push(std::move(buf));
         m_index = m_exportNext;                            // timeline + viewer follow the export
         ++m_exportNext;
@@ -213,6 +232,47 @@ void App::processExport()
         m_exporter->finish();
         m_exportFinishing = true;
     }
+}
+
+BurnInText App::burnInText(int index) const
+{
+    const BurnInOptions& b = m_exportOpt.burnIn;
+    BurnInText t;
+    const int number = m_seq->frames[index].number;
+    if (b.name) {
+        t.topLeft = SequenceBaseName(*m_seq);
+        const std::string layer = currentLayerLabel();
+        if (!stackActive() && m_layer != m_exrInfo.defaultLayer && !layer.empty()) t.topLeft += L"  ·  " + FromUtf8(layer);
+    }
+    t.topRight = FromUtf8(b.text);
+    if (b.date) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        wchar_t date[32];
+        swprintf(date, 32, L"%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+        t.topRight += (t.topRight.empty() ? L"" : L"  ·  ") + std::wstring(date);
+    }
+    if (b.timecode) t.bottomLeft = FromUtf8(FrameTimecode(number, m_exportOpt.fps));
+    if (b.frame) t.bottomRight = std::to_wstring(number);
+    return t;
+}
+
+// Black bars and burn-in on a rendered export frame (packed RGB / RGBA, as sent to FFmpeg).
+void App::frameExport(std::vector<uint8_t>& px, int width, int height, int index)
+{
+    const ExportOptions& o = m_exportOpt;
+    if (!(o.aspect > 0 && o.aspectBars) && !o.burnIn.enabled) return;
+    const int channels = m_exporter->hasAlpha() ? 4 : 3;
+    const bool sixteen = m_exporter->is16Bit();
+    int x = 0, y = 0, w = width, h = height;
+    if (o.aspect > 0) AspectRect(width, height, o.aspect, x, y, w, h);
+    if (o.aspect > 0 && o.aspectBars) {
+        FillOutside(px.data(), width, height, channels, sixteen, x, y, w, h);
+        x = y = 0;   // the texts go on the bars
+        w = width;
+        h = height;
+    }
+    if (o.burnIn.enabled) DrawBurnIn(px.data(), width, height, channels, sixteen, x, y, w, h, burnInText(index));
 }
 
 void App::drawCodecRows(ExportOptions& o, float labelW)
@@ -276,13 +336,49 @@ void App::drawCodecRows(ExportOptions& o, float labelW)
         }
     }
 
+    // Framing: crop to an aspect ratio, or keep the frame and paint black bars.
+    row(tr(S::Framing));
+    ImGui::SetNextItemWidth(o.aspect ? 120 * m_dpiScale : -FLT_MIN);
+    if (ImGui::BeginCombo("##aspect", o.aspect ? AspectLabel(o.aspect) : tr(S::FullFrame))) {
+        if (ImGui::Selectable(tr(S::FullFrame), o.aspect == 0)) o.aspect = 0;
+        for (int i = 1; i < AspectCount(); ++i)
+            if (ImGui::Selectable(AspectLabel(i), o.aspect == i)) o.aspect = i;
+        ImGui::EndCombo();
+    }
+    if (o.aspect) {
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(S::AspectCrop), !o.aspectBars)) o.aspectBars = false;
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(S::AspectBars), o.aspectBars)) o.aspectBars = true;
+    }
+
+    row(tr(S::BurnIn));
+    ImGui::Checkbox(tr(S::BurnInOn), &o.burnIn.enabled);
+    if (o.burnIn.enabled) {
+        ImGui::SetCursorPosX(labelW);
+        ImGui::Checkbox(tr(S::BurnName), &o.burnIn.name);
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(S::BurnFrame), &o.burnIn.frame);
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(S::BurnTimecode), &o.burnIn.timecode);
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(S::BurnDate), &o.burnIn.date);
+        ImGui::SetCursorPosX(labelW);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        char text[256];
+        snprintf(text, sizeof(text), "%s", o.burnIn.text.c_str());
+        if (ImGui::InputTextWithHint("##burntext", tr(S::BurnText), text, sizeof(text))) o.burnIn.text = text;
+    }
+
     row(tr(S::Size));
     const int scales[] = { 100, 50, 25 };
     char label[64];
     auto even = [](double v) { return std::max(2, (int)std::lround(v / 2.0) * 2); };
+    int cropX = 0, cropY = 0, cropW = o.width, cropH = o.height;
+    if (o.aspect && !o.aspectBars) AspectRect(o.width, o.height, o.aspect, cropX, cropY, cropW, cropH);
     auto format = [&](int sc) {
         if (o.width > 0)
-            snprintf(label, sizeof(label), "%d%%  (%d\xC3\x97%d)", sc, even(o.width * sc / 100.0), even(o.height * sc / 100.0));
+            snprintf(label, sizeof(label), "%d%%  (%d\xC3\x97%d)", sc, even(cropW * sc / 100.0), even(cropH * sc / 100.0));
         else
             snprintf(label, sizeof(label), "%d%%", sc);
         return label;

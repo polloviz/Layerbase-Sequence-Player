@@ -41,6 +41,7 @@ void App::setLayer(int index)
     if (index == m_layer) return;
     m_layer = index;
     applyLoadOptions();
+    if (compareActive()) setCompare(m_cmpSeq->frames[0].path, false);   // B shows that layer too
 }
 
 void App::setMatteMode(MatteMode m)

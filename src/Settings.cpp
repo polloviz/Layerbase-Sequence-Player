@@ -42,6 +42,19 @@ void Settings::load()
         else if (k == "confirmReplace") confirmReplace = toInt(1) != 0;
         else if (k == "frameSaveDir") frameSaveDir = v;
         else if (k == "frameSaveExt") frameSaveExt = v;
+        else if (k == "liveRefresh") liveRefresh = toInt(1) != 0;
+        else if (k == "guideAspect") guideAspect = std::clamp(toInt(0), 0, 8);
+        else if (k == "guideSafe") guideSafe = toInt(0) != 0;
+        else if (k == "guideCenter") guideCenter = toInt(0) != 0;
+        else if (k == "guideThirds") guideThirds = toInt(0) != 0;
+        else if (k == "exportAspect") exportAspect = std::clamp(toInt(0), 0, 8);
+        else if (k == "exportAspectBars") exportAspectBars = toInt(0) != 0;
+        else if (k == "burnIn") burnIn = toInt(0) != 0;
+        else if (k == "burnName") burnName = toInt(1) != 0;
+        else if (k == "burnFrame") burnFrame = toInt(1) != 0;
+        else if (k == "burnTimecode") burnTimecode = toInt(0) != 0;
+        else if (k == "burnDate") burnDate = toInt(0) != 0;
+        else if (k == "burnText") burnText = v;
         else if (k == "exportCodec") exportCodec = std::clamp(toInt(0), 0, 6);
         else if (k == "exportQuality") exportQuality = std::clamp(toInt(0), 0, 2);
         else if (k == "exportScale") exportScale = std::clamp(toInt(100), 10, 100);
@@ -86,6 +99,11 @@ void Settings::save() const
       << "\nbatchUseLayer=" << (batchUseLayer ? 1 : 0) << "\n"
       << "lutPosition=" << lutPosition << "\nconfirmReplace=" << (confirmReplace ? 1 : 0) << "\n"
       << "frameSaveDir=" << frameSaveDir << "\nframeSaveExt=" << frameSaveExt << "\n"
+      << "liveRefresh=" << (liveRefresh ? 1 : 0) << "\nguideAspect=" << guideAspect << "\nguideSafe=" << (guideSafe ? 1 : 0)
+      << "\nguideCenter=" << (guideCenter ? 1 : 0) << "\nguideThirds=" << (guideThirds ? 1 : 0) << "\n"
+      << "exportAspect=" << exportAspect << "\nexportAspectBars=" << (exportAspectBars ? 1 : 0) << "\n"
+      << "burnIn=" << (burnIn ? 1 : 0) << "\nburnName=" << (burnName ? 1 : 0) << "\nburnFrame=" << (burnFrame ? 1 : 0)
+      << "\nburnTimecode=" << (burnTimecode ? 1 : 0) << "\nburnDate=" << (burnDate ? 1 : 0) << "\nburnText=" << burnText << "\n"
       << "checkUpdates=" << (checkUpdates ? 1 : 0) << "\nlastUpdateCheck=" << lastUpdateCheck << "\nskipVersion=" << skipVersion << "\n";
     for (auto& r : recentConfigs) o << "recentConfig=" << r << "\n";
     for (auto& r : recentFiles) o << "recentFile=" << r << "\n";

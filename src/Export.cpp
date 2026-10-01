@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <map>
 
@@ -19,6 +20,53 @@ const char* ExportCodecName(ExportCodec c)
     case ExportCodec::ProRes4444: return "ProRes 4444 (MOV)";
     default: return "?";
     }
+}
+
+static const struct { const char* label; double ratio; } kAspects[] = {
+    { "", 0.0 }, { "2.39:1", 2.39 }, { "2:1", 2.0 }, { "1.85:1", 1.85 }, { "16:9", 16.0 / 9.0 },
+    { "4:3", 4.0 / 3.0 }, { "1:1", 1.0 }, { "4:5", 0.8 }, { "9:16", 9.0 / 16.0 },
+};
+
+int AspectCount() { return (int)std::size(kAspects); }
+const char* AspectLabel(int i) { return i > 0 && i < AspectCount() ? kAspects[i].label : ""; }
+double AspectRatio(int i) { return i > 0 && i < AspectCount() ? kAspects[i].ratio : 0.0; }
+
+void AspectRect(int width, int height, int index, int& x, int& y, int& w, int& h)
+{
+    const double r = AspectRatio(index);
+    w = width;
+    h = height;
+    if (r > 0 && width > 0 && height > 0) {
+        if (double(width) / height > r) w = std::min(width, std::max(2, (int)std::lround(height * r / 2.0) * 2));
+        else h = std::min(height, std::max(2, (int)std::lround(width / r / 2.0) * 2));
+    }
+    x = (width - w) / 2;
+    y = (height - h) / 2;
+}
+
+int ParseAspect(const std::string& text)
+{
+    for (int i = 1; i < AspectCount(); ++i) {
+        const std::string label = kAspects[i].label;
+        if (text == label || (label.size() > 2 && label.compare(label.size() - 2, 2, ":1") == 0 && text == label.substr(0, label.size() - 2)))
+            return i;
+    }
+    return 0;
+}
+
+BurnInOptions ParseBurnIn(const std::string& fields, const std::string& text)
+{
+    BurnInOptions b;
+    b.enabled = !fields.empty() || !text.empty();
+    if (!fields.empty()) {
+        const std::string f = "," + fields + ",";
+        b.name = f.find(",name,") != std::string::npos;
+        b.frame = f.find(",frame,") != std::string::npos;
+        b.timecode = f.find(",timecode,") != std::string::npos;
+        b.date = f.find(",date,") != std::string::npos;
+    }
+    b.text = text;
+    return b;
 }
 
 bool ExportCodecIsProRes(ExportCodec c) { return c >= ExportCodec::ProRes422Proxy && c <= ExportCodec::ProRes4444; }
@@ -127,7 +175,10 @@ bool MovieExporter::start(const FFmpegInfo& ff, const ExportOptions& opt, std::s
     m_outputPath = opt.outputPath;
 
     auto even = [](double v) { return std::max(2, (int)std::lround(v / 2.0) * 2); };
-    const int outW = even(opt.width * opt.scalePercent / 100.0), outH = even(opt.height * opt.scalePercent / 100.0);
+    // Cropped to the aspect ratio before scaling (bars are painted into the frames instead).
+    int cropX = 0, cropY = 0, cropW = opt.width, cropH = opt.height;
+    if (opt.aspect > 0 && !opt.aspectBars) AspectRect(opt.width, opt.height, opt.aspect, cropX, cropY, cropW, cropH);
+    const int outW = even(cropW * opt.scalePercent / 100.0), outH = even(cropH * opt.scalePercent / 100.0);
     const int q = (int)opt.quality;
 
     std::wstring pixOut, codec;
@@ -170,7 +221,11 @@ bool MovieExporter::start(const FFmpegInfo& ff, const ExportOptions& opt, std::s
     args += m_alpha ? L"rgba64le" : m_16bit ? L"rgb48le" : L"rgb24";
     args += L" -s " + std::to_wstring(opt.width) + L"x" + std::to_wstring(opt.height);
     args += L" -framerate " + FpsArg(opt.fps) + L" -i pipe:0 -an";
-    args += L" -vf \"scale=" + std::to_wstring(outW) + L":" + std::to_wstring(outH) +
+    args += L" -vf \"";
+    if (cropW != opt.width || cropH != opt.height)
+        args += L"crop=" + std::to_wstring(cropW) + L":" + std::to_wstring(cropH) + L":" + std::to_wstring(cropX) + L":" +
+                std::to_wstring(cropY) + L",";
+    args += L"scale=" + std::to_wstring(outW) + L":" + std::to_wstring(outH) +
             L":flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=" + swsMatrix + L":out_range=tv,format=" + pixOut +
             // Recent FFmpeg takes color tags from the frames, so set them in the graph too.
             L",setparams=range=tv:color_primaries=" + FromUtf8(opt.primaries) + L":color_trc=" + FromUtf8(opt.transfer) +

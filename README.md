@@ -29,7 +29,13 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 - **Viewing:** fit/100%, wheel zoom around the cursor, pan, R/G/B/A/Luma channels, pixel inspector (float values under the cursor), fullscreen, hideable UI.
 - **Current frame:** the buttons beside the frame number copy the frame to the clipboard (Ctrl+C), save it as PNG, JPEG or 16-bit TIFF (Ctrl+S), or show its file selected in File Explorer (Ctrl+Shift+R). Copies and saves are at full resolution (also with a playback proxy) with everything applied in the viewer: color, LUT, exposure, gamma, channel, layer, mask, AOV stack.
 - **Replacing the open sequence:** opening or dropping another sequence asks for confirmation first and lists what would be lost (AOV stack, In/Out, Cryptomatte selection…). It can be turned off in the dialog or in Settings.
-- **Movie export (Ctrl+E):** H.264 and H.265 (MP4, x264/x265 or NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ and 4444 (MOV). Color is applied exactly as displayed (input → display/view, look, exposure, gamma, channel) on the GPU; H.265 and ProRes are fed 16 bits per channel. Files are tagged with the display primaries/transfer (sRGB, Rec.1886, P3, Rec.2020, PQ). Full range or In/Out, 100/50/25% scale, frame rate. **FFmpeg is included**; another build can be chosen in the export dialog (also searched in PATH, `C:\FFMPEG\bin`, winget, choco).
+- **Live refresh:** while a render writes into the folder of the open sequence, new frames appear on the timeline by themselves and re-rendered or unreadable frames are read again; playback keeps going and an In/Out range that reached the end extends with it. Sequences tied to it (AOV passes, Cryptomatte, compare) follow. The folder is watched only once the first frame is on screen; it can be turned off in Settings.
+- **Versions:** a `v<number>` in the file or folder name (`shot_v002.1001.exr`, `renders\v002\shot.1001.exr`) shows a version menu next to the frame number; Alt+Up / Alt+Down open the newer / older version keeping the frame, In/Out, input color space, Cryptomatte selection, AOV stack and compare.
+- **A/B compare:** the *A/B* button (bottom bar) compares the open sequence with another sequence or one of its versions, matched by frame number: wipe (drag the line), side by side, difference of the file values (amplified) or toggle. W changes the mode, X swaps A and B. B goes through the same view from its own input space and shows the same EXR layer. Captures and exports use A.
+- **QC:** the *QC* button (bottom bar) shows NaN, Inf and negative pixels (N, with a pixel count on the still frame), false color bands of the display luminance (E), zebra on clipped whites and crushed blacks (Z); scopes (H: waveform, histogram, vectorscope of the frame as viewed); guides (aspect masks 2.39:1 to 9:16, safe areas, rule of thirds, center cross); and the frame report. Checks are drawn only in the viewer, never in captures or exports.
+- **Metadata (Ctrl+I):** the *Info* panel lists the header of the current frame's file (every EXR attribute of every part: renderer, camera, render settings, including the JSON Octane writes; TIFF tags), with a search field and *Copy all*.
+- **Frame report:** missing frame numbers (also marked on the timeline), empty or much smaller files, frames that cannot be read; *Read every frame* decodes the whole sequence in the background to find damaged files; click an entry to go to that frame, *Copy report* for the render farm.
+- **Movie export (Ctrl+E):** H.264 and H.265 (MP4, x264/x265 or NVIDIA NVENC), ProRes 422 Proxy/LT/422/HQ and 4444 (MOV). Color is applied exactly as displayed (input → display/view, look, exposure, gamma, channel) on the GPU; H.265 and ProRes are fed 16 bits per channel. Files are tagged with the display primaries/transfer (sRGB, Rec.1886, P3, Rec.2020, PQ). Full range or In/Out, 100/50/25% scale, frame rate. **Framing:** crop to an aspect ratio (2.39:1, 2:1, 1.85:1, 16:9, 4:3, 1:1, 4:5, 9:16) or keep the frame with black bars. **Burn-in:** shot name, frame number, timecode, date and a custom text in the corners (on the bars when there are bars). **FFmpeg is included**; another build can be chosen in the export dialog (also searched in PATH, `C:\FFMPEG\bin`, winget, choco).
 - **Multi-layer EXR:** layers and multi-part files are listed in the *Layer* menu (bottom bar); the selected layer is shown and exported (XYZ vectors and single channels such as Z are shown as RGB / gray). The layer stays selected when opening another shot that contains it.
 - **Cryptomatte:** the *Cryptomatte* button (bottom bar) opens the panel: layer (CryptoObject/Material/Asset), *IDs* (colors per object), *Overlay*, *Masked* (only the selection, in scene-linear before the view), *Matte* (black and white mask). Select objects by clicking in the viewer or from the manifest list (searchable). The mask applies to playback and export; in ProRes 4444 it can become the alpha channel. Channel names are matched case-insensitively (Octane writes `.r/.g/.b/.a`). A Cryptomatte-only file opens in IDs mode.
   - **External Cryptomatte sequence:** with a sequence open, *Load Cryptomatte sequence…* (panel or menu) masks it with the Cryptomatte of another sequence (e.g. Octane's `cm-*` pass). Frames are matched by number (by position if the numbering differs); a different resolution is scaled. Works with a beauty in any format. Opening another shot removes the external matte, so it does not apply to batch conversion.
@@ -56,6 +62,11 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 | F11 / Enter / double-click | fullscreen |
 | Ctrl+C / Ctrl+S | copy the frame to the clipboard / save it as an image |
 | Ctrl+Shift+R | show the frame's file in File Explorer |
+| Alt+Up / Alt+Down | newer / older version |
+| W, X | A/B compare mode, swap A and B |
+| N / E / Z | NaN-Inf-negative check / false color / zebra |
+| H | scopes |
+| Ctrl+I | metadata panel |
 | Ctrl+O / Ctrl+Shift+O | open file / folder |
 | Ctrl+E | export movie |
 | Ctrl+B | batch convert |
@@ -69,6 +80,7 @@ SequencePlayer.exe [--fps 24] [--play] [--proxy 2|4] [--config C:\path\config.oc
 SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha [--premultiplied]]
                    exports without interaction, then exits (exit code 0 = ok)
 SequencePlayer.exe --batch D:\renders [--out-dir D:\movies] [--codec h264] [--nvenc] [--overwrite]
+Export and batch:  [--aspect 2.39:1|2:1|1.85:1|16:9|4:3|1:1|4:5|9:16 [--bars]] [--burn-in name,frame,timecode,date] [--burn-text "Client review"]
                    converts every sequence in the folder and subfolders, then exits
 EXR options:       [--layer diffuse] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select ball,floor]
                    [--crypto-seq D:\render\cm\shot_cm_0000.exr]   mask from an external Cryptomatte sequence
@@ -77,7 +89,7 @@ SequencePlayer.exe --register      registers the formats (per user, no admin)
 SequencePlayer.exe --unregister    removes the registration
 ```
 
-Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack|replace` opens a dialog at startup; `SP_TEST_LUT=<file>` loads a LUT; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
+Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack|replace|info|scopes|report|reportcheck` opens a dialog at startup (`SP_TEST_SCOPE=0|1|2` picks the scope); `SP_TEST_COMPARE=<file>` compares with another sequence (`SP_TEST_COMPARE_MODE=0..3`: wipe, side by side, difference, toggle); `SP_TEST_CHECK=1|2|3` turns on a pixel check; `SP_TEST_GUIDE=<1..8>` shows an aspect mask with all guides; `SP_TEST_VERSION=1|-1` opens the newer / older version; `SP_TEST_LUT=<file>` loads a LUT; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
 
 ## Building
 
@@ -121,6 +133,11 @@ Output in `dist\`:
 | `src/GLViewer.cpp` | OCIO-generated GLSL shader, LUT textures, image drawing, AOV stack compositing |
 | `src/TextureUploader.cpp` | background texture uploads on a shared GL context |
 | `src/StackUI.cpp` | AOV stack: layers, decode plan, panel |
+| `src/CompareUI.cpp` | A/B compare: second sequence, menu |
+| `src/QcUI.cpp` | pixel checks, guides, scopes, compare overlays |
+| `src/InfoUI.cpp`, `src/Metadata.cpp` | metadata panel, EXR / TIFF header reading |
+| `src/SequenceUI.cpp`, `src/DirWatcher.cpp` | live refresh (folder watcher), versions, frame report |
+| `src/BurnIn.cpp` | export burn-in (GDI text) and black bars |
 | `src/ColorAgx.cpp` | built-in AgX (native OCIO transforms), Blender config discovery |
 | `src/Export.cpp`, `src/ExportUI.cpp` | movie export through FFmpeg (pipe), dialog and progress |
 | `src/ExrLayers.cpp`, `src/CryptoUI.cpp` | multi-layer/multi-part EXR, Cryptomatte decoding, panel |
@@ -129,7 +146,7 @@ Output in `dist\`:
 | `src/UpdateCheck.cpp`, `src/UpdateUI.cpp` | optional update check (WinHTTP) and banner |
 | `src/FrameCache.cpp` | multi-threaded decoding with a memory-budgeted cache |
 | `src/ImageIO.cpp` | EXR, DPX, TIFF and stb readers |
-| `src/Sequence.cpp` | sequence detection from file names |
+| `src/Sequence.cpp` | sequence detection from file names, rescans, versions |
 | `src/Platform.cpp` | Windows registry ("Open with"), dialogs, HTTP, utilities |
 | `src/I18n.h` | all EN/IT strings |
 | `installer/SequencePlayer.iss` | Inno Setup installer (EN/IT) |

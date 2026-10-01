@@ -140,14 +140,18 @@ void App::drawUI()
     drawBatchDialog();
     drawExportProgress();
     drawReplaceConfirm();
+    drawFrameReport();
+    drawScopes();
 
     const float vh = std::max(1.0f, vp->Size.y - m_topBarH - m_bottomBarH);
-    const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel);
-    m_panelW = panel ? std::round((m_stackPanel ? 330 : 310) * m_dpiScale) : 0.0f;
+    if (m_cryptoPanel || m_stackPanel) m_infoPanel = false;   // one side panel at a time
+    const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel || m_infoPanel);
+    m_panelW = panel ? std::round((m_stackPanel ? 330 : m_cryptoPanel ? 310 : 360) * m_dpiScale) : 0.0f;
     if (m_panelW > 0) {
         const float px = vp->Pos.x + vp->Size.x - m_panelW, py = vp->Pos.y + m_topBarH;
         if (m_stackPanel) drawStackPanel(px, py, m_panelW, vh);
-        else drawCryptoPanel(px, py, m_panelW, vh);
+        else if (m_cryptoPanel) drawCryptoPanel(px, py, m_panelW, vh);
+        else drawInfoPanel(px, py, m_panelW, vh);
     }
     const float vx = vp->Pos.x, vy = vp->Pos.y + m_topBarH;
     const float vw = std::max(1.0f, vp->Size.x - m_panelW);
@@ -417,6 +421,18 @@ void App::drawMainMenu()
     if (ImGui::MenuItem(tr(S::BatchMenu), "Ctrl+B")) openBatchDialog();
     if (ImGui::MenuItem(tr(S::LoadMatte), nullptr, false, m_seq != nullptr && !stackActive())) defer([this] { loadMatteDialog(); });
     ImGui::Separator();
+    if (ImGui::MenuItem(tr(S::CompareWith), nullptr, false, m_seq != nullptr && !stackActive()))
+        defer([this] {
+            const std::wstring p = ShowOpenFileDialog(m_hwnd, false, FromUtf8(tr(S::CompareWith)).c_str());
+            if (!p.empty()) setCompare(p);
+        });
+    if (ImGui::MenuItem(tr(S::Metadata), "Ctrl+I", m_infoPanel, m_seq != nullptr)) {
+        m_infoPanel = !m_infoPanel;
+        if (m_infoPanel) m_cryptoPanel = m_stackPanel = false;
+    }
+    if (ImGui::MenuItem(tr(S::Scopes), "H", m_scopesOpen, m_seq != nullptr)) m_scopesOpen = !m_scopesOpen;
+    if (ImGui::MenuItem(tr(S::FrameReport), nullptr, false, m_seq != nullptr)) m_reportOpen = true;
+    ImGui::Separator();
     if (ImGui::MenuItem(tr(S::LoadCustomConfig))) defer([this] { loadCustomConfigDialog(); });
     if (ImGui::MenuItem(tr(S::LoadLut))) defer([this] { loadLutDialog(); });
     ImGui::Separator();
@@ -484,6 +500,11 @@ void App::drawTimeline(float width, float height)
         }
     }
 
+    // Gaps in the numbering: a tick where frames are missing
+    for (int i = 1; i < n; ++i)
+        if (m_seq->frames[i].number - m_seq->frames[i - 1].number > 1)
+            dl->AddRectFilled(ImVec2(xOf(i) - 1.0f * s, p.y + 3 * s), ImVec2(xOf(i) + 1.0f * s, trackY0 - 1 * s), IM_COL32(255, 160, 60, 230));
+
     // Scrubbing
     if (ImGui::IsItemActivated()) {
         m_scrubResumeDir = m_playDir;
@@ -502,7 +523,9 @@ void App::drawTimeline(float width, float height)
         const int idx = std::clamp((int)((ImGui::GetIO().MousePos.x - p.x) / cell), 0, n - 1);
         const float hx = xOf(idx) + cell * 0.5f;
         dl->AddLine(ImVec2(hx, p.y + 4 * s), ImVec2(hx, p.y + height - 4 * s), IM_COL32(255, 255, 255, 70), 1.0f);
-        ImGui::SetTooltip("%d", m_seq->frames[idx].number);
+        const int gap = idx > 0 ? m_seq->frames[idx].number - m_seq->frames[idx - 1].number - 1 : 0;
+        if (gap > 0) ImGui::SetTooltip("%d   (%d %s)", m_seq->frames[idx].number, gap, tr(S::GapBefore));
+        else ImGui::SetTooltip("%d", m_seq->frames[idx].number);
     }
 
     // Playhead
@@ -548,6 +571,10 @@ void App::drawTransport()
         tip = std::string(tr(S::RevealFrame)) + "  (Ctrl+Shift+R)";
         if (IconButton("##revealframe", Icon::Folder, fh, false, tip.c_str())) revealFrame();
         ImGui::SameLine();
+        if (!VersionToken(*m_seq).empty()) {
+            drawVersionCombo();
+            ImGui::SameLine();
+        }
         // Info text is clipped before the centered transport buttons.
         const float clipX = ImGui::GetWindowPos().x + std::floor((windowW - (fh + 4 * s) * 8.8f) * 0.5f) - 12 * s;
         const ImVec2 cp = ImGui::GetCursorScreenPos();
@@ -624,7 +651,7 @@ void App::drawTransport()
     const float wAlphaCombo = 128 * s;
     const float wAlpha = alphaCombo ? wAlphaCombo + st.ItemSpacing.x : 0;
     auto buttonW = [&](const char* t) { return ImGui::CalcTextSize(t).x + st.FramePadding.x * 2 + st.ItemSpacing.x; };
-    const float wPanels = n > 0 ? buttonW(tr(S::Stack)) + buttonW("Cryptomatte") : 0;
+    const float wPanels = n > 0 ? buttonW("A/B") + buttonW("QC") + buttonW(tr(S::Info)) + buttonW(tr(S::Stack)) + buttonW("Cryptomatte") : 0;
     const float rightW = wLayer + wAlpha + wPanels + wLoop + wFps + wRes + wCh + wZoom + wActual + st.ItemSpacing.x * 4;
     ImGui::SetCursorPos(ImVec2(windowW - st.WindowPadding.x - rightW, rowY));
 
@@ -638,11 +665,24 @@ void App::drawTransport()
     }
     if (n > 0) {
         const ImVec4 onColor(0.29f, 0.56f, 1.0f, 0.45f);
+        drawCompareMenu();
+        ImGui::SameLine();
+        drawQcMenu();
+        ImGui::SameLine();
+        if (m_infoPanel) ImGui::PushStyleColor(ImGuiCol_Button, onColor);
+        if (ImGui::Button(tr(S::Info))) {
+            m_infoPanel = !m_infoPanel;
+            if (m_infoPanel) m_cryptoPanel = m_stackPanel = false;
+        }
+        if (m_infoPanel) ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%s  (Ctrl+I)", tr(S::Metadata));
+        ImGui::SameLine();
+
         const bool stackOn = m_stackPanel || stackActive();
         if (stackOn) ImGui::PushStyleColor(ImGuiCol_Button, onColor);
         if (ImGui::Button(tr(S::Stack))) {
             m_stackPanel = !m_stackPanel;
-            if (m_stackPanel) m_cryptoPanel = false;
+            if (m_stackPanel) m_cryptoPanel = m_infoPanel = false;
         }
         if (stackOn) ImGui::PopStyleColor();
         ImGui::SetItemTooltip("%s", tr(S::StackTitle));
@@ -655,7 +695,7 @@ void App::drawTransport()
         else if (!hasCrypto()) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         if (ImGui::Button("Cryptomatte")) {
             m_cryptoPanel = !m_cryptoPanel;
-            if (m_cryptoPanel) m_stackPanel = false;
+            if (m_cryptoPanel) m_stackPanel = m_infoPanel = false;
         }
         if (on || !hasCrypto()) ImGui::PopStyleColor();
         ImGui::EndDisabled();
@@ -778,6 +818,7 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
         return ts.x + 12 * s;
     };
 
+    drawGuides(vx, vy, vw, vh);
     if (m_seq) {
         const ImagePtr cur = baseImage(m_cache.get(m_index));
         if (cur && !cur->valid()) {
@@ -803,6 +844,19 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
     }
     if (!m_colorManaged) x += badge(ImVec2(x, y), "OCIO OFF", IM_COL32(255, 180, 90, 255)) + 6 * s;
     if (m_seq && m_planProxy > 1) x += badge(ImVec2(x, y), m_planProxy == 2 ? "PROXY 1:2" : "PROXY 1:4", kText) + 6 * s;
+    if (m_seq && m_check == CheckMode::FalseColor) x += badge(ImVec2(x, y), "FALSE COLOR", kText) + 6 * s;
+    if (m_seq && m_check == CheckMode::Zebra) x += badge(ImVec2(x, y), "ZEBRA", kText) + 6 * s;
+    if (m_seq && m_check == CheckMode::BadPixels) {
+        // Counted on the still frame of a single image (the shader marks them in any case).
+        char buf[128];
+        const bool counted = m_badImage && m_badImage == m_shown && !stackActive();
+        if (!counted) snprintf(buf, sizeof(buf), "NaN / Inf  \xC2\xB7  %s", tr(S::BadNeg));
+        else if (!m_badNan && !m_badNeg) snprintf(buf, sizeof(buf), "%s", tr(S::BadNone));
+        else snprintf(buf, sizeof(buf), "NaN / Inf  %zu px  \xC2\xB7  %s  %zu px", m_badNan, tr(S::BadNeg), m_badNeg);
+        const ImU32 col = !counted ? kText : m_badNan ? IM_COL32(255, 110, 255, 255) : m_badNeg ? IM_COL32(90, 220, 255, 255)
+                                                                                           : IM_COL32(120, 220, 130, 255);
+        x += badge(ImVec2(x, y), buf, col) + 6 * s;
+    }
     if (!m_uiVisible && m_seq) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%d", m_seq->frames[m_index].number);
@@ -812,13 +866,15 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
     // Pixel inspector (bottom-left)
     if (m_hoverValid) {
         char buf[256];
-        snprintf(buf, sizeof(buf), "%s%s%5d %5d   R %.4f  G %.4f  B %.4f  A %.4f", stackActive() ? m_hoverLayer.c_str() : "",
-                 stackActive() ? "   " : "", m_hoverX, m_hoverY, m_hoverRGBA[0], m_hoverRGBA[1], m_hoverRGBA[2], m_hoverRGBA[3]);
+        const bool named = stackActive() || m_hoverB;
+        snprintf(buf, sizeof(buf), "%s%s%5d %5d   R %.4f  G %.4f  B %.4f  A %.4f", named ? m_hoverLayer.c_str() : "",
+                 named ? "   " : "", m_hoverX, m_hoverY, m_hoverRGBA[0], m_hoverRGBA[1], m_hoverRGBA[2], m_hoverRGBA[3]);
         ImGui::PushFont(m_fontMono, 0.0f);
         const float fh = ImGui::GetFontSize();
         badge(ImVec2(vx + pad, vy + vh - pad - fh - 6 * s), buf, kText, m_fontMono);
         ImGui::PopFont();
     }
+    drawQcOverlays(vx, vy, vw, vh);
 
     // Toast
     if (!m_toast.empty() && ImGui::GetTime() >= 0) {
@@ -900,6 +956,11 @@ void App::drawSettings()
         // Confirmations
         row(tr(S::Confirmations));
         ImGui::Checkbox(tr(S::ConfirmReplace), &m_settings.confirmReplace);
+
+        // Live refresh
+        row(tr(S::Sequence));
+        if (ImGui::Checkbox(tr(S::LiveRefresh), &m_settings.liveRefresh)) startWatching();
+        ImGui::SetItemTooltip("%s", tr(S::LiveRefreshHint));
 
         // File associations
         ImGui::Spacing();

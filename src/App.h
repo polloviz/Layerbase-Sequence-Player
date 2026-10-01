@@ -1,8 +1,11 @@
 #pragma once
+#include "BurnIn.h"
 #include "ColorManager.h"
+#include "DirWatcher.h"
 #include "Export.h"
 #include "FrameCache.h"
 #include "GLViewer.h"
+#include "Metadata.h"
 #include "Sequence.h"
 #include "Settings.h"
 
@@ -28,6 +31,9 @@ struct StartupOptions {
     std::wstring batchRoot, batchOutDir;                    // --batch: convert all sequences, then quit
     bool overwrite = false;
     int proxy = 1;                        // playback resolution divisor (2 = half, 4 = quarter)
+    std::string aspect;                   // --aspect 2.39:1 (export framing), --bars
+    bool aspectBars = false;
+    std::string burnIn, burnText;         // --burn-in name,frame,timecode,date  --burn-text "..."
 };
 
 enum class LoopMode : int { Loop = 0, Once = 1, PingPong = 2 };
@@ -57,6 +63,8 @@ struct StackLayer {
 
 class App {
 public:
+    static constexpr unsigned kDirChangedMsg = 0x8000 + 2;   // WM_APP + 2: the watched folder changed
+
     int run(const std::wstring& initialPath, double fpsOverride, bool autoplay, const StartupOptions& opts);
 
     // Called from the window procedure.
@@ -141,6 +149,45 @@ private:
     void stackTestSetup();
     void drawStackPanel(float x, float y, float w, float h);
     void drawStackAddMenu();
+    bool makeSequenceLayer(const std::wstring& path, StackLayer& out);   // a layer from another sequence
+
+    // The sequence on disk (SequenceUI.cpp): live refresh, versions, frame report
+    void startWatching();
+    void refreshSequence();
+    void switchVersion(int delta);                           // +1 newer, -1 older
+    void openVersion(const SequenceVersion& v);              // keeps frame, range, color, stack, compare
+    void drawVersionCombo();
+    void drawFrameReport();
+    void startFrameCheck();
+    std::string frameReportText() const;
+
+    // A/B compare (CompareUI.cpp): B frames matched by number, decoded with A
+    bool compareActive() const { return m_cmpSeq != nullptr; }
+    void setCompare(const std::wstring& path, bool announce = true);
+    void clearCompare();
+    void rematchCompare();                                   // after A or B changed on disk
+    void resetCompare();                                     // forget B (no plan update)
+    void drawCompareMenu();
+    ImagePtr compareImage(const FrameSetPtr& set) const;
+    std::string compareInput() const;
+
+    // QC (QcUI.cpp): pixel checks, guides, scopes
+    void setCheck(CheckMode m);
+    void drawQcMenu();
+    void drawGuides(float vx, float vy, float vw, float vh);
+    void drawQcOverlays(float vx, float vy, float vw, float vh);
+    void updateScopes();
+    void drawScopes();
+    void countBadPixels();
+
+    // Metadata panel (InfoUI.cpp)
+    void drawInfoPanel(float x, float y, float w, float h);
+
+    // Where the image is on screen (screen pixels, y down), as GLViewer::draw places it.
+    // half: -1 whole viewport, 0 / 1 left / right half (side-by-side compare).
+    struct ScreenRect { float x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
+    ScreenRect imageRect(float vx, float vy, float vw, float vh, int half = -1) const;
+    bool sideBySide() const { return compareActive() && m_cmpMode == CompareMode::SideBySide; }
 
     // Current frame (FrameUI.cpp)
     AlphaMode alphaModeFor(const ImagePtr& img) const;   // for an image of the opened sequence
@@ -191,6 +238,8 @@ private:
     void startExport();
     void processExport();
     void deriveColorTags(ExportOptions& opt) const;
+    BurnInText burnInText(int index) const;               // texts burned into frame `index`
+    void frameExport(std::vector<uint8_t>& px, int width, int height, int index);   // bars and burn-in
     std::wstring defaultExportPath() const;
 
     int frameCount() const { return m_seq ? m_seq->count() : 0; }
@@ -286,6 +335,50 @@ private:
     bool m_stackPanel = false;
     std::vector<std::string> m_stackInputs;   // input spaces with a GPU transform (CompLayer::transform)
     std::string m_hoverLayer;                 // pixel inspector source in the stack
+
+    // Live refresh: the folder of the open sequence is watched once the first frame is up
+    DirWatcher m_watcher;
+    double m_refreshFirst = 0.0, m_refreshDue = 0.0;   // pending change: first notice, quiet deadline
+    std::vector<SequenceVersion> m_versions;           // listed when the version menu opens
+
+    // A/B compare
+    std::shared_ptr<const Sequence> m_cmpSeq;
+    std::shared_ptr<const std::vector<std::wstring>> m_cmpFiles;   // per frame of m_seq, "" = missing
+    int m_cmpMissing = 0;
+    LoadOptionsPtr m_cmpOpts;
+    std::string m_cmpKey;
+    bool m_cmpIsFloat = true;
+    std::string m_cmpInput;                   // B input space; "" = the same as A
+    CompareMode m_cmpMode = CompareMode::Wipe;
+    float m_wipe = 0.5f;
+    bool m_cmpSwap = false;
+    float m_diffGain = 10.0f;
+    bool m_wipeDrag = false;
+    bool m_hoverB = false;                    // the pixel inspector reads B
+
+    // QC
+    CheckMode m_check = CheckMode::Off;
+    ImagePtr m_badImage;                      // image the counts below belong to
+    size_t m_badNan = 0, m_badNeg = 0;
+    bool m_scopesOpen = false;
+    double m_scopesAt = 0.0;
+    std::vector<float> m_hist;                // 4 x 256 bins: R, G, B, luma
+    std::vector<uint8_t> m_wave, m_vector;    // 256 x 256 RGBA scope images
+    unsigned m_waveTex = 0, m_vectorTex = 0;
+    bool m_scopesValid = false;
+
+    // Metadata panel
+    bool m_infoPanel = false;
+    std::vector<MetaEntry> m_meta;
+    std::wstring m_metaPath;
+    uint64_t m_metaStamp = 0;
+    double m_metaAt = 0.0;
+    char m_metaFilter[128] = {};
+
+    // Frame report
+    bool m_reportOpen = false;
+    struct FrameCheck;                        // background decode of every frame
+    std::shared_ptr<FrameCheck> m_frameCheck;
 
     // batch
     struct BatchItem {

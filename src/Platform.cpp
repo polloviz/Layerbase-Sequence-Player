@@ -448,6 +448,24 @@ void RevealInExplorer(const std::wstring& path)
     ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
 }
 
+bool SetClipboardText(HWND owner, const std::string& text)
+{
+    const std::wstring w = FromUtf8(text);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (w.size() + 1) * sizeof(wchar_t));
+    if (!h) return false;
+    memcpy(GlobalLock(h), w.c_str(), (w.size() + 1) * sizeof(wchar_t));
+    GlobalUnlock(h);
+    if (!OpenClipboard(owner)) {
+        GlobalFree(h);
+        return false;
+    }
+    EmptyClipboard();
+    const bool ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
+    if (!ok) GlobalFree(h);
+    CloseClipboard();
+    return ok;
+}
+
 bool SetClipboardImage(HWND owner, const uint8_t* rgb, int width, int height, const std::string& png)
 {
     if (!rgb || width <= 0 || height <= 0) return false;

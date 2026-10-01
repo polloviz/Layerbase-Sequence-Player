@@ -33,6 +33,11 @@ It is free and open source, including for commercial use.
 - **No duplicate windows**: selecting several frames in File Explorer and pressing Enter opens a single window.
 - **Drag and drop** files or folders onto the window.
 
+- **Follows a render in progress**: new frames appear on the timeline as the renderer writes them, and re-rendered or
+  unreadable frames are read again, while playback goes on.
+- **Versions in one key**: when the name has a version (`shot_v002`, or a `v002` folder), Alt+Up / Alt+Down open the newer
+  or older version on the same frame, with the same In/Out, colors, AOV stack and comparison.
+
 **Why it helps:** checking a render becomes as quick as opening a photo. No projects to create, nothing to import.
 
 ## 2. Supported formats
@@ -74,6 +79,30 @@ and without color mistakes in your previews.
   at full resolution and exactly as you see it (color, LUT, exposure, channel, mask, AOV stack).
   Another button shows the frame's file selected in File Explorer.
 - **No lost work**: opening another sequence by mistake asks for confirmation first.
+
+### Compare versions (A/B)
+
+- The **A/B** button compares the open sequence with another one or with one of its versions, frame by frame:
+  **wipe** (drag the line), **side by side**, **difference** (black = identical, amplified to reveal small changes)
+  or **toggle** between the two. W changes the mode, X swaps A and B.
+- Both go through the same color pipeline, so only the render differs.
+
+**Why it helps:** you see at once what changed between two versions, without a compositing app.
+
+### Quality check (QC)
+
+- **NaN, Inf and negative pixels** highlighted, with a count on the current frame: find broken pixels and fireflies before
+  they reach the client.
+- **False color** of the displayed brightness and **zebra** on clipped whites and crushed blacks.
+- **Scopes**: waveform, histogram and vectorscope of the frame as you see it.
+- **Guides**: aspect masks (2.39:1, 1.85:1, 16:9, 4:5, 1:1, 9:16 for social media), safe areas, rule of thirds, center cross.
+- **Frame report**: missing frames (also marked on the timeline), empty or truncated files, frames that cannot be read;
+  it can read every frame in the background, and the report can be copied for the render farm.
+- **Metadata** (Ctrl+I): everything the renderer wrote in the file header (render settings, camera, Octane's JSON...).
+
+Checks are shown only in the viewer, never in captures or exports.
+
+**Why it helps:** technical checks that usually need a compositing app, one click away.
 
 ## 5. Multi-layer EXR
 
@@ -125,6 +154,8 @@ without going through compositing.
 - H.265 and ProRes are encoded from 16-bit-per-channel data. Files are tagged with the correct primaries and transfer curve
   (sRGB, Rec.709, P3, Rec.2020, PQ), so players display them with the right colors.
 - Full range or In/Out only, 100/50/25% scale, frame rate of your choice.
+- **Framing**: crop to 2.39:1, 16:9, 4:5, 1:1, 9:16... (for example a vertical cut for social media) or keep the frame with black bars.
+- **Burn-in**: shot name, frame number, timecode, date and your own text burned into the corners, for dailies and client reviews.
 
 **Why it helps:** from render to client movie in a single step, with no color difference between the preview and the final file.
 
@@ -170,6 +201,11 @@ without going through compositing.
 | F11 / double-click | fullscreen |
 | Ctrl+C / Ctrl+S | copy frame / save frame |
 | Ctrl+Shift+R | show frame in File Explorer |
+| Alt+↑ / Alt+↓ | newer / older version |
+| W / X | compare mode / swap A and B |
+| N / E / Z | NaN check / false color / zebra |
+| H | scopes |
+| Ctrl+I | metadata |
 | Ctrl+E | export movie |
 | Ctrl+B | batch convert |
 

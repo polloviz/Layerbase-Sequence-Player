@@ -60,8 +60,8 @@ enum class Lang { English = 0, Italian = 1 };
     X(LoadError,         "Cannot load frame",                     "Impossibile caricare il frame") \
     X(ConfigError,       "OCIO error",                            "Errore OCIO") \
     X(Shortcuts,         "Shortcuts",                             "Scorciatoie") \
-    X(ShortcutsText,     "Space  play/pause\nJ / K / L  reverse / stop / forward\nLeft / Right  step\nHome / End  first / last\nI / O  in / out point,  U  clear\nF  fit,  1  100%,  wheel  zoom,  middle drag  pan\nR G B A  channels,  C  RGB\n[ ] or - +  exposure,  Backspace  reset\nTab  hide UI,  F11 / double click  fullscreen\nCtrl+C  copy frame,  Ctrl+S  save frame,  Ctrl+Shift+R  show in Explorer\nCtrl+E  export movie,  Ctrl+B  batch convert", \
-                                                                  "Spazio  play/pausa\nJ / K / L  indietro / stop / avanti\nSinistra / Destra  frame singolo\nHome / Fine  primo / ultimo\nI / O  punto in / out,  U  azzera\nF  adatta,  1  100%,  rotella  zoom,  tasto centrale  sposta\nR G B A  canali,  C  RGB\n[ ] oppure - +  esposizione,  Backspace  reset\nTab  nascondi UI,  F11 / doppio clic  schermo intero\nCtrl+C  copia frame,  Ctrl+S  salva frame,  Ctrl+Shift+R  mostra in Esplora risorse\nCtrl+E  esporta filmato,  Ctrl+B  conversione batch") \
+    X(ShortcutsText,     "Space  play/pause\nJ / K / L  reverse / stop / forward\nLeft / Right  step\nHome / End  first / last\nI / O  in / out point,  U  clear\nF  fit,  1  100%,  wheel  zoom,  middle drag  pan\nR G B A  channels,  C  RGB\n[ ] or - +  exposure,  Backspace  reset\nTab  hide UI,  F11 / double click  fullscreen\nCtrl+C  copy frame,  Ctrl+S  save frame,  Ctrl+Shift+R  show in Explorer\nCtrl+E  export movie,  Ctrl+B  batch convert\nAlt+Up / Alt+Down  newer / older version\nW  compare mode,  X  swap A/B\nN  NaN check,  E  false color,  Z  zebra,  H  scopes,  Ctrl+I  metadata", \
+                                                                  "Spazio  play/pausa\nJ / K / L  indietro / stop / avanti\nSinistra / Destra  frame singolo\nHome / Fine  primo / ultimo\nI / O  punto in / out,  U  azzera\nF  adatta,  1  100%,  rotella  zoom,  tasto centrale  sposta\nR G B A  canali,  C  RGB\n[ ] oppure - +  esposizione,  Backspace  reset\nTab  nascondi UI,  F11 / doppio clic  schermo intero\nCtrl+C  copia frame,  Ctrl+S  salva frame,  Ctrl+Shift+R  mostra in Esplora risorse\nCtrl+E  esporta filmato,  Ctrl+B  conversione batch\nAlt+Su / Alt+Giù  versione successiva / precedente\nW  modalità confronto,  X  scambia A/B\nN  controllo NaN,  E  falsi colori,  Z  zebra,  H  scope,  Ctrl+I  metadati") \
     X(AboutText,         "Fast image sequence player with OpenColorIO, ACES 1.3 and ACES 2.0 support.", \
                                                                   "Player veloce di sequenze di immagini con supporto OpenColorIO, ACES 1.3 e ACES 2.0.") \
     X(InOut,             "In/Out",                                "In/Out") \
@@ -250,7 +250,82 @@ enum class Lang { English = 0, Italian = 1 };
     X(DontAskAgain,      "Don't ask again (can be changed in Settings)", "Non chiedere più (modificabile in Impostazioni)") \
     X(ConfirmReplace,    "Ask before replacing the open sequence", "Chiedi prima di sostituire la sequenza aperta") \
     X(Confirmations,     "Confirmations",                         "Conferme") \
-    X(OpenAnyway,        "Open",                                  "Apri")
+    X(OpenAnyway,        "Open",                                  "Apri") \
+    X(ReplaceCompare,   "A/B compare", "Confronto A/B") \
+    X(LiveRefresh,      "Update the open sequence while it renders", "Aggiorna la sequenza aperta mentre viene renderizzata") \
+    X(LiveRefreshHint,  "New and re-rendered frames appear by themselves; frames that could not be read are read again.", "I frame nuovi e quelli renderizzati di nuovo compaiono da soli; i frame illeggibili vengono riletti.") \
+    X(FramesAdded,      "new frames", "nuovi frame") \
+    X(FramesUpdated,    "frames updated", "frame aggiornati") \
+    X(Version,          "Version", "Versione") \
+    X(VersionHint,      "Versions of this render next to it (Alt+Up / Alt+Down). Frame, In/Out, color, stack and compare are kept.", "Versioni di questo render accanto a esso (Alt+Su / Alt+Giù). Frame, In/Out, colore, stack e confronto restano.") \
+    X(NoNewerVersion,   "No newer version", "Nessuna versione più recente") \
+    X(NoOlderVersion,   "No older version", "Nessuna versione precedente") \
+    X(NoVersions,       "No other versions found next to this sequence.", "Nessun'altra versione trovata accanto a questa sequenza.") \
+    X(CompareTitle,     "Compare A/B", "Confronto A/B") \
+    X(CompareWith,      "Compare with sequence...", "Confronta con una sequenza...") \
+    X(CompareVersion,   "Compare with version", "Confronta con la versione") \
+    X(CompareChange,    "Change B...", "Cambia B...") \
+    X(CompareRemove,    "Stop comparing", "Termina confronto") \
+    X(CompareWipe,      "Wipe", "Tendina") \
+    X(CompareSide,      "Side by side", "Affiancate") \
+    X(CompareDiff,      "Difference", "Differenza") \
+    X(CompareToggle,    "Toggle A / B", "Alterna A / B") \
+    X(CompareSwap,      "Swap A and B", "Scambia A e B") \
+    X(CompareGain,      "Gain", "Guadagno") \
+    X(CompareHint,      "B frames are matched by frame number. W changes the mode, X swaps A and B; drag the line to move the wipe. Captures and exports use A.", "I frame di B sono abbinati per numero. W cambia modalità, X scambia A e B; trascina la linea per spostare la tendina. Catture ed export usano A.") \
+    X(CompareDiffHint,  "Absolute difference of the file values, amplified by the gain: black = identical.", "Differenza assoluta dei valori del file, amplificata dal guadagno: nero = identico.") \
+    X(Comparing,        "Comparing with", "Confronto con") \
+    X(QcTitle,          "Quality check: pixels, scopes, guides, frame report", "Controllo qualità: pixel, scope, guide, report dei frame") \
+    X(Pixels,           "Pixels", "Pixel") \
+    X(CheckOff,         "Normal", "Normale") \
+    X(CheckBad,         "NaN, Inf and negative values", "Valori NaN, Inf e negativi") \
+    X(CheckFalse,       "False color (display exposure)", "Falsi colori (esposizione a display)") \
+    X(CheckZebra,       "Zebra (clipped whites, crushed blacks)", "Zebra (bianchi bruciati, neri chiusi)") \
+    X(CheckHint,        "Viewer only: never in captures or exports.", "Solo nel viewer: mai nelle catture o negli export.") \
+    X(BadNone,          "No NaN, Inf or negative values", "Nessun valore NaN, Inf o negativo") \
+    X(BadNeg,           "negative", "negativi") \
+    X(Scopes,           "Scopes", "Scope") \
+    X(Histogram,        "Histogram", "Istogramma") \
+    X(Waveform,         "Waveform", "Forma d'onda") \
+    X(Vectorscope,      "Vectorscope", "Vettorscopio") \
+    X(ScopesHint,       "Display values of the frame as viewed (color, LUT, exposure, stack).", "Valori di display del frame come visualizzato (colore, LUT, esposizione, stack).") \
+    X(Guides,           "Guides", "Guide") \
+    X(GuideAspect,      "Aspect mask", "Maschera formato") \
+    X(GuideNone,        "None", "Nessuna") \
+    X(GuideSafe,        "Safe areas (action 93%, title 90%)", "Aree di sicurezza (azione 93%, titoli 90%)") \
+    X(GuideCenter,      "Center cross", "Croce centrale") \
+    X(GuideThirds,      "Rule of thirds", "Regola dei terzi") \
+    X(FrameReport,      "Frame report...", "Report dei frame...") \
+    X(Metadata,         "Metadata", "Metadati") \
+    X(MetaHint,         "Header of the current frame's file.", "Intestazione del file del frame corrente.") \
+    X(CopyAll,          "Copy all", "Copia tutto") \
+    X(CopiedText,       "Copied to the clipboard", "Copiato negli appunti") \
+    X(ReportTitle,      "Frame report", "Report dei frame") \
+    X(ReportMissing,    "Missing frames", "Frame mancanti") \
+    X(ReportNoMissing,  "No missing frames", "Nessun frame mancante") \
+    X(ReportSmall,      "Suspicious files (empty or much smaller than the others)", "File sospetti (vuoti o molto più piccoli degli altri)") \
+    X(ReportErrors,     "Frames that cannot be read", "Frame illeggibili") \
+    X(ReportCheckAll,   "Read every frame", "Leggi tutti i frame") \
+    X(ReportChecking,   "Reading frames", "Lettura dei frame") \
+    X(ReportCheckHint,  "Decodes every frame in the background to find damaged files. Otherwise only the frames already decoded are known.", "Decodifica tutti i frame in background per trovare i file danneggiati. Altrimenti si conoscono solo i frame già decodificati.") \
+    X(ReportAllOk,      "Every frame can be read", "Tutti i frame sono leggibili") \
+    X(ReportNoErrors,   "No errors in the decoded frames", "Nessun errore nei frame decodificati") \
+    X(CopyReport,       "Copy report", "Copia report") \
+    X(Expected,         "expected", "attesi") \
+    X(EmptyFile,        "empty file", "file vuoto") \
+    X(SmallFile,        "much smaller than usual", "molto più piccolo del solito") \
+    X(GapBefore,        "missing before this frame", "mancanti prima di questo frame") \
+    X(Framing,          "Framing", "Inquadratura") \
+    X(FullFrame,        "Full frame", "Fotogramma intero") \
+    X(AspectCrop,       "Crop", "Ritaglia") \
+    X(AspectBars,       "Black bars", "Bande nere") \
+    X(BurnIn,           "Burn-in", "Sovrimpressione") \
+    X(BurnInOn,         "Burn text into the frames", "Imprimi testo nei frame") \
+    X(BurnName,         "Shot", "Shot") \
+    X(BurnFrame,        "Frame", "Frame") \
+    X(BurnTimecode,     "Timecode", "Timecode") \
+    X(BurnDate,         "Date", "Data") \
+    X(BurnText,         "Custom text", "Testo libero")
 
 enum class S {
 #define X(id, en, it) id,

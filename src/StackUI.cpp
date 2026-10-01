@@ -71,6 +71,7 @@ void App::applyLoadPlan()
         const bool crypto = m_loadOpts && m_loadOpts->cryptoActive();
         const ExrLayer* layer = m_layer >= 0 && m_layer < (int)m_exrInfo.layers.size() ? &m_exrInfo.layers[m_layer] : nullptr;
         plan->layers.push_back({ crypto ? "view#" + std::to_string(++m_viewSerial) : LayerKey(nullptr, layer), nullptr, m_loadOpts });
+        if (compareActive()) plan->layers.push_back({ m_cmpKey, m_cmpFiles, m_cmpOpts });   // B, decoded with A
     } else {
         for (const StackLayer& s : m_stack)
             if (std::none_of(plan->layers.begin(), plan->layers.end(), [&](const LayerLoad& l) { return l.key == s.key; }))
@@ -126,7 +127,8 @@ std::vector<CompLayer> App::compLayers(const FrameSetPtr& set) const
 void App::stackBegin()
 {
     if (stackActive() || !m_seq) return;
-    // The current view becomes the bottom layer. Cryptomatte does not apply to the stack.
+    // The current view becomes the bottom layer. Cryptomatte and A/B compare do not apply to the stack.
+    resetCompare();
     if (m_matte != MatteMode::Off) setMatteMode(MatteMode::Off);
     m_cryptoPanel = false;
     m_stackPanel = true;
@@ -188,34 +190,40 @@ void App::stackAddOther(const StackLayer& source, int exrLayer)
     stackPush(std::move(l));
 }
 
+bool App::makeSequenceLayer(const std::wstring& path, StackLayer& l)
+{
+    int start = 0;
+    Sequence seq = DetectSequence(path, &start);
+    if (seq.empty() || !IsSupportedExtension(GetFileExtension(seq.frames[0].path)) || !FileExists(seq.frames[start].path)) return false;
+    l.seq = std::make_shared<const Sequence>(std::move(seq));
+    auto files = std::make_shared<const std::vector<std::wstring>>(MatchFrames(*m_seq, *l.seq));
+    l.missing = (int)std::count(files->begin(), files->end(), std::wstring());
+    l.files = files;
+    const std::wstring ext = GetFileExtension(l.seq->frames[0].path);
+    l.isFloat = IsFloatFormat(ext);
+    if (ext == L".exr") {
+        ExrInfo info = ReadExrInfo(l.seq->frames[start].path);
+        if (!info.layers.empty()) {
+            l.exrLayer = info.defaultLayer;
+            l.exrLayers = std::make_shared<const std::vector<ExrLayer>>(std::move(info.layers));
+        }
+    }
+    l.input = autoInput(l.isFloat, l.seq->frames[0].path);
+    l.blend = BlendMode::Add;
+    return true;
+}
+
 void App::stackAddSequences(const std::vector<std::wstring>& paths)
 {
     if (!m_seq) return;
     int missing = 0;
     for (const std::wstring& path : paths) {
-        int start = 0;
-        Sequence seq = DetectSequence(path, &start);
-        if (seq.empty() || !IsSupportedExtension(GetFileExtension(seq.frames[0].path))) {
+        StackLayer l;
+        if (!makeSequenceLayer(path, l)) {
             showToast(std::string(tr(S::NotASequence)) + " " + ToUtf8(GetFileName(path)), true);
             continue;
         }
         stackBegin();
-        StackLayer l;
-        l.seq = std::make_shared<const Sequence>(std::move(seq));
-        auto files = std::make_shared<const std::vector<std::wstring>>(MatchFrames(*m_seq, *l.seq));
-        l.missing = (int)std::count(files->begin(), files->end(), std::wstring());
-        l.files = files;
-        const std::wstring ext = GetFileExtension(l.seq->frames[0].path);
-        l.isFloat = IsFloatFormat(ext);
-        if (ext == L".exr") {
-            ExrInfo info = ReadExrInfo(l.seq->frames[start].path);
-            if (!info.layers.empty()) {
-                l.exrLayer = info.defaultLayer;
-                l.exrLayers = std::make_shared<const std::vector<ExrLayer>>(std::move(info.layers));
-            }
-        }
-        l.input = autoInput(l.isFloat, l.seq->frames[0].path);
-        l.blend = BlendMode::Add;
         missing += l.missing;
         stackPush(std::move(l));
     }

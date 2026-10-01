@@ -29,6 +29,16 @@ add_executable(SequencePlayer WIN32
     src/App.h
     src/AboutUI.cpp
     src/BatchUI.cpp
+    src/BurnIn.cpp
+    src/BurnIn.h
+    src/CompareUI.cpp
+    src/DirWatcher.cpp
+    src/DirWatcher.h
+    src/InfoUI.cpp
+    src/Metadata.cpp
+    src/Metadata.h
+    src/QcUI.cpp
+    src/SequenceUI.cpp
     src/UI.cpp
     src/ColorAgx.cpp
     src/CryptoUI.cpp

@@ -10,6 +10,24 @@
 enum class ExportCodec : int { H264 = 0, H265, ProRes422Proxy, ProRes422LT, ProRes422, ProRes422HQ, ProRes4444, Count };
 enum class ExportQuality : int { High = 0, Medium, Low };
 
+// Aspect ratios of the viewer guides and of the export framing; index 0 = full frame.
+int AspectCount();
+const char* AspectLabel(int index);   // "2.39:1"
+double AspectRatio(int index);        // width / height, 0 = full frame
+// The centered area of a width x height frame with that aspect ratio (even sizes).
+void AspectRect(int width, int height, int index, int& x, int& y, int& w, int& h);
+
+// Text burned into every exported frame.
+struct BurnInOptions {
+    bool enabled = false;
+    bool name = true, frame = true, timecode = false, date = false;
+    std::string text;             // free text (UTF-8), top right
+};
+
+// Command line: "2.39:1" / "2.39" / "16:9" -> aspect index (0 = full frame); "name,frame,timecode,date" -> burn-in.
+int ParseAspect(const std::string& text);
+BurnInOptions ParseBurnIn(const std::string& fields, const std::string& text);
+
 struct ExportOptions {
     std::wstring outputPath;
     ExportCodec codec = ExportCodec::H264;
@@ -19,6 +37,9 @@ struct ExportOptions {
     bool premultiplied = false;   // with alpha: color premultiplied by it (default straight)
     int width = 0, height = 0;    // source frame size
     int scalePercent = 100;       // 100 / 50 / 25
+    int aspect = 0;               // AspectRatio index; 0 = full frame
+    bool aspectBars = false;      // keep the frame size and paint black bars instead of cropping
+    BurnInOptions burnIn;
     double fps = 30.0;
     // Color tagging of the display-referred output (derived from the OCIO display).
     std::string primaries = "bt709", transfer = "bt709", matrix = "bt709";
