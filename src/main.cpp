@@ -12,6 +12,7 @@
 //   SequencePlayer.exe <path> --export <out.mp4|out.mov> [--codec h264|h265|prores-proxy|prores-lt|prores|prores-hq|prores-4444] [--nvenc] [--alpha [--premultiplied]]
 //   SequencePlayer.exe --batch <folder> [--out-dir <folder>] [--codec ...] [--nvenc] [--overwrite]   (recursive)
 //   Export and batch: [--aspect 2.39:1|2:1|1.85:1|16:9|4:3|1:1|4:5|9:16 [--bars]] [--burn-in name,frame,timecode,date] [--burn-text "..."]
+//                     [--denoise oidn|oidn-cpu|oidn-gpu|optix|optix-temporal]   (Open Image Denoise must have been downloaded once)
 //   EXR: [--layer <name>] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select name1,name2]
 //        [--crypto-seq <frame of a Cryptomatte sequence>]   (external matte, matched by frame number)
 //   SequencePlayer.exe --register | --unregister     (used by the installer)
@@ -51,6 +52,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (a == L"--bars") opts.aspectBars = true;
         else if (a == L"--burn-in" && i + 1 < argc) opts.burnIn = ToUtf8(argv[++i]);
         else if (a == L"--burn-text" && i + 1 < argc) opts.burnText = ToUtf8(argv[++i]);
+        else if (a == L"--denoise" && i + 1 < argc) opts.denoise = ToUtf8(argv[++i]);
         else if (path.empty()) path = a;
     }
     LocalFree(argv);

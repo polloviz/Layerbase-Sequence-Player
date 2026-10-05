@@ -3,6 +3,7 @@
 #include "Platform.h"
 
 #include <algorithm>
+#include <array>
 #include <windows.h>
 
 bool FrameSet::complete() const
@@ -63,14 +64,50 @@ void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vec
         else it->second.push_back(k);
     }
     static const LoadOptions kDefault;
+    // Denoiser guides of each layer (albedo, normal, motion vectors): EXR layers of the same file.
+    constexpr int kGuides = 3;
+    std::vector<std::array<ImagePtr, kGuides>> guides(plan.layers.size());
+    auto guideOpts = [&](size_t k, int g) -> const LoadOptions* {
+        const DenoiseSpecPtr& d = plan.layers[k].denoise;
+        return !d ? nullptr : g == 0 ? d->albedo.get() : g == 1 ? d->normal.get() : d->temporal ? d->flow.get() : nullptr;
+    };
+    // Temporal denoise chains frames per stream; the frames being decoded are announced first,
+    // so the next frame waits for this one instead of starting a new chain.
+    std::vector<std::string> streams(plan.layers.size());
+    for (const auto& [path, layers] : byFile)
+        for (size_t k : layers)
+            if (plan.layers[k].denoise && plan.layers[k].denoise->temporal) {
+                streams[k] = ToUtf8(seq.directory + L"\\" + seq.displayName()) + "|" + plan.layers[k].key + "|" + std::to_string(plan.proxy);
+                DenoiseFrameStarted(streams[k], index);
+            }
+    struct Finish {
+        const std::vector<std::string>& streams;
+        int index;
+        ~Finish() {
+            for (const auto& s : streams)
+                if (!s.empty()) DenoiseFrameFinished(s, index);
+        }
+    } finish{ streams, index };
+
     for (const auto& [path, layers] : byFile) {
-        bool together = layers.size() > 1 && GetFileExtension(path) == L".exr";
+        const bool exr = GetFileExtension(path) == L".exr";
+        size_t reads = layers.size();
+        for (size_t k : layers)
+            for (int g = 0; g < kGuides; ++g) reads += exr && guideOpts(k, g);
+        bool together = reads > 1 && exr;
         for (size_t k : layers) together = together && !(plan.layers[k].opts && plan.layers[k].opts->cryptoActive());
         if (together) {
             std::vector<const LoadOptions*> opts;
-            for (size_t k : layers) opts.push_back(plan.layers[k].opts ? plan.layers[k].opts.get() : &kDefault);
+            std::vector<std::pair<size_t, int>> dest;   // (layer, -1 = the layer itself / guide index)
+            for (size_t k : layers) {
+                opts.push_back(plan.layers[k].opts ? plan.layers[k].opts.get() : &kDefault);
+                dest.push_back({ k, -1 });
+                for (int g = 0; g < kGuides; ++g)
+                    if (const LoadOptions* o = guideOpts(k, g)) { opts.push_back(o); dest.push_back({ k, g }); }
+            }
             std::vector<ImagePtr> imgs = LoadExrLayers(path, opts);
-            for (size_t j = 0; j < layers.size(); ++j) images[layers[j]] = imgs[j];
+            for (size_t j = 0; j < dest.size(); ++j)
+                (dest[j].second < 0 ? images[dest[j].first] : guides[dest[j].first][dest[j].second]) = imgs[j];
             continue;
         }
         for (size_t k : layers) {
@@ -78,11 +115,36 @@ void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vec
             std::wstring matte;
             if (o && o->cryptoFiles && index < (int)o->cryptoFiles->size()) matte = (*o->cryptoFiles)[index];
             images[k] = LoadImageFile(path, o, matte);
+            std::vector<const LoadOptions*> opts;
+            std::vector<int> which;
+            for (int g = 0; g < kGuides; ++g)
+                if (exr && guideOpts(k, g)) { opts.push_back(guideOpts(k, g)); which.push_back(g); }
+            if (!opts.empty()) {
+                std::vector<ImagePtr> imgs = LoadExrLayers(path, opts);
+                for (size_t j = 0; j < which.size(); ++j) guides[k][which[j]] = imgs[j];
+            }
         }
     }
     if (plan.proxy > 1)
         for (const auto& [path, layers] : byFile)
-            for (size_t k : layers) images[k] = Downscale(images[k], plan.proxy);
+            for (size_t k : layers) {
+                images[k] = Downscale(images[k], plan.proxy);
+                for (ImagePtr& g : guides[k]) g = Downscale(g, plan.proxy);
+            }
+    // Filters run last, on the frame as it is shown (a proxy frame denoises much faster).
+    for (const auto& [path, layers] : byFile)
+        for (size_t k : layers)
+            if (plan.layers[k].denoise && images[k] && images[k]->valid()) {
+                DenoiseInput in;
+                in.color = images[k];
+                in.albedo = guides[k][0];
+                in.normal = guides[k][1];
+                in.flow = guides[k][2];
+                in.flowScale = 1.0f / float(std::max(1, plan.proxy));
+                in.stream = streams[k];
+                in.frame = streams[k].empty() ? -1 : index;
+                images[k] = DenoiseImage(in, *plan.layers[k].denoise);
+            }
 }
 
 FrameCache::FrameCache()

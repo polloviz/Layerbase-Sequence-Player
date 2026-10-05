@@ -70,12 +70,25 @@ void App::applyLoadPlan()
         // With Cryptomatte the pixels depend on the selection: a fresh key decodes them again.
         const bool crypto = m_loadOpts && m_loadOpts->cryptoActive();
         const ExrLayer* layer = m_layer >= 0 && m_layer < (int)m_exrInfo.layers.size() ? &m_exrInfo.layers[m_layer] : nullptr;
-        plan->layers.push_back({ crypto ? "view#" + std::to_string(++m_viewSerial) : LayerKey(nullptr, layer), nullptr, m_loadOpts });
+        LayerLoad view{ crypto ? "view#" + std::to_string(++m_viewSerial) : LayerKey(nullptr, layer), nullptr, m_loadOpts };
+        if (DenoiseSpecPtr d = denoiseSpec()) {   // B of a compare stays as it is: before / after
+            view.key += "|" + d->key;
+            view.denoise = std::move(d);
+        }
+        plan->layers.push_back(std::move(view));
         if (compareActive()) plan->layers.push_back({ m_cmpKey, m_cmpFiles, m_cmpOpts });   // B, decoded with A
     } else {
-        for (const StackLayer& s : m_stack)
-            if (std::none_of(plan->layers.begin(), plan->layers.end(), [&](const LayerLoad& l) { return l.key == s.key; }))
-                plan->layers.push_back({ s.key, s.files, LayerOptions(SelectedExrLayer(s)) });
+        static const std::vector<ExrLayer> kNoLayers;
+        for (StackLayer& s : m_stack) {
+            LayerLoad load{ s.key, s.files, LayerOptions(SelectedExrLayer(s)) };
+            if (s.denoise) {   // guides come from the layer's own file
+                load.denoise = makeDenoiseSpec(s.exrLayers ? *s.exrLayers : kNoLayers);
+                load.key += "|" + load.denoise->key;
+            }
+            s.loadKey = load.key;
+            if (std::none_of(plan->layers.begin(), plan->layers.end(), [&](const LayerLoad& l) { return l.key == load.key; }))
+                plan->layers.push_back(std::move(load));
+        }
     }
     m_cache.setPlan(plan);
 }
@@ -94,7 +107,7 @@ ImagePtr App::baseImage(const FrameSetPtr& set) const
     if (!stackActive()) return set->images[0];
     ImagePtr lowest;
     for (const StackLayer& s : m_stack) {
-        ImagePtr img = set->find(s.key);
+        ImagePtr img = stackImage(set, s);
         if (img && img->valid()) return img;
         if (!lowest) lowest = img;
     }
@@ -108,7 +121,7 @@ std::vector<CompLayer> App::compLayers(const FrameSetPtr& set) const
     for (const StackLayer& s : m_stack) {
         if (!s.visible) continue;
         CompLayer c;
-        c.image = set->find(s.key);
+        c.image = stackImage(set, s);
         const auto it = std::find(m_stackInputs.begin(), m_stackInputs.end(), s.input);
         c.transform = it == m_stackInputs.end() ? -1 : int(it - m_stackInputs.begin());
         c.blend = s.blend;
@@ -138,6 +151,7 @@ void App::stackBegin()
         base.exrLayer = std::clamp(m_layer, 0, (int)m_exrInfo.layers.size() - 1);
     }
     base.isFloat = IsFloatFormat(m_seqExt);
+    base.denoise = m_denoise;   // the view's denoise carries over to its layer
     base.input = m_color.input;
     base.inputAuto = !m_inputUserChosen;
     base.blend = BlendMode::Normal;
@@ -243,6 +257,7 @@ void App::stackRemove(int index)
     m_stackSel = std::clamp(m_stackSel >= index ? m_stackSel - 1 : m_stackSel, 0, std::max(0, (int)m_stack.size() - 1));
     applyLoadPlan();
     m_colorDirty = true;
+    denoiseUnused();
 }
 
 void App::stackMove(int from, int to)
@@ -263,6 +278,7 @@ void App::stackClear()
     m_stackSel = 0;
     applyLoadPlan();
     m_colorDirty = true;
+    denoiseUnused();
 }
 
 void App::stackSetExrLayer(int index, int exrLayer)
@@ -292,7 +308,8 @@ void App::stackRefreshInputs()
 }
 
 // Debug: SP_TEST_STACK=diffuse,specular:add,C:\passes\spec.0001.exr,hidebase builds a stack at
-// startup from layer names of the opened file and other sequences (optional :blend suffix).
+// startup from layer names of the opened file and other sequences (optional :blend suffix);
+// "denoise" turns the denoise on for the layer added just before.
 void App::stackTestSetup()
 {
     const wchar_t* env = _wgetenv(L"SP_TEST_STACK");
@@ -308,6 +325,10 @@ void App::stackTestSetup()
             if (stackActive()) m_stack.front().visible = false;
             continue;
         }
+        if (item == L"denoise") {   // the layer added last
+            if (stackActive()) stackSetDenoise((int)m_stack.size() - 1, true);
+            continue;
+        }
         BlendMode blend = BlendMode::Add;
         const size_t colon = item.rfind(L':');
         if (colon != std::wstring::npos && colon > 1)   // not a drive letter
@@ -315,6 +336,7 @@ void App::stackTestSetup()
                 if (item.compare(colon + 1, std::wstring::npos, blends[b]) == 0) {
                     blend = (BlendMode)b;
                     item.resize(colon);
+                    break;   // the suffix is gone: comparing further would read past the end
                 }
         const size_t before = m_stack.size();
         if (item.find_first_of(L"\\/") != std::wstring::npos) {
@@ -415,7 +437,7 @@ void App::drawStackPanel(float x, float y, float w, float h)
         const ImVec2 rowPos = ImGui::GetCursorPos();
         if (ImGui::Selectable("##row", i == m_stackSel, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, rowH))) m_stackSel = i;
         const ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
-        const ImagePtr img = m_shownSet ? m_shownSet->find(l.key) : nullptr;
+        const ImagePtr img = stackImage(m_shownSet, l);
         const bool bad = img && !img->valid();
         if (bad) ImGui::SetItemTooltip("%s", img->error.c_str());
         if (ImGui::BeginDragDropSource()) {
@@ -431,7 +453,8 @@ void App::drawStackPanel(float x, float y, float w, float h)
             ImGui::EndDragDropTarget();
         }
 
-        const char* blend = BlendName(l.blend);
+        const std::string blendText = l.denoise ? std::string("DN \xC2\xB7 ") + BlendName(l.blend) : std::string(BlendName(l.blend));
+        const char* blend = blendText.c_str();
         const ImVec2 bs = ImGui::CalcTextSize(blend);
         const float textY = (r0.y + r1.y - bs.y) * 0.5f;
         const float nameX = r0.x + rowH + st.ItemInnerSpacing.x;
@@ -507,6 +530,16 @@ void App::drawStackPanel(float x, float y, float w, float h)
     row(tr(S::Exposure));
     ImGui::DragFloat("##layerexposure", &l.exposure, 0.02f, -16.0f, 16.0f, "EV %+.2f");
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) l.exposure = 0.0f;
+
+    row(tr(S::Denoise));
+    bool dn = l.denoise;
+    if (ImGui::Checkbox("##layerdenoise", &dn)) stackSetDenoise(sel, dn);
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(S::Filters))) {   // engine and guides
+        m_filterPanel = true;
+        m_stackPanel = false;
+    }
+    ImGui::SetItemTooltip("%s", tr(S::DenoiseLayerHint));
 
     ImGui::Spacing();
     const float bw = (ImGui::GetContentRegionAvail().x - st.ItemSpacing.x * 2) / 3.0f;

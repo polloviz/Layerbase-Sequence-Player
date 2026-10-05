@@ -34,6 +34,7 @@ struct StartupOptions {
     std::string aspect;                   // --aspect 2.39:1 (export framing), --bars
     bool aspectBars = false;
     std::string burnIn, burnText;         // --burn-in name,frame,timecode,date  --burn-text "..."
+    std::string denoise;                  // --denoise oidn|oidn-cpu|oidn-gpu|optix|optix-temporal
 };
 
 enum class LoopMode : int { Loop = 0, Once = 1, PingPong = 2 };
@@ -59,7 +60,12 @@ struct StackLayer {
     float opacity = 1.0f;
     float exposure = 0.0f;                                   // stops
     bool visible = true;
+    bool denoise = false;                                    // with the engine set in the Filters panel
+    std::string loadKey;                                     // key of the decoded (filtered) pixels; "" = key
 };
+
+// Denoiser guide passes, picked among the EXR layers of the denoised file.
+enum class GuideKind { Albedo, Normal, Flow };
 
 class App {
 public:
@@ -80,7 +86,12 @@ private:
     void frame();
 
     // actions
-    void openPath(const std::wstring& path, bool addToRecent = true);
+    // Finding the frames and reading the first header run on a worker. When that takes more
+    // than a moment (a cloud drive downloading an online-only file, a slow share) the window
+    // stays responsive and the sequence replaces the shown one once ready; `then` runs after
+    // it opened. wait = finish before returning (batch, command-line export).
+    void openPath(const std::wstring& path, bool addToRecent = true, std::function<void()> then = {}, bool wait = false);
+    void pollOpen();
     void requestOpen(const std::wstring& path);   // asks first when it would replace the open sequence
     std::vector<const char*> workToLose() const;   // what opening another sequence resets
     void openDialog(bool folder);
@@ -183,6 +194,24 @@ private:
     // Metadata panel (InfoUI.cpp)
     void drawInfoPanel(float x, float y, float w, float h);
 
+    // Filters (FilterUI.cpp): denoise of the viewed sequence or of single stack layers, exports
+    // and batch conversion included
+    bool denoiseActive() const { return m_denoise && !stackActive(); }
+    bool denoiseInUse() const;                     // the view or a stack layer is denoised
+    DenoiseSpecPtr denoiseSpec() const;            // the view's filter for the decode plan; null = off
+    DenoiseSpecPtr makeDenoiseSpec(const std::vector<ExrLayer>& layers) const;   // guides among `layers`
+    void setDenoise(bool on);                      // asks to download Open Image Denoise first when needed
+    void stackSetDenoise(int index, bool on);
+    // True when the engine can run now; otherwise the download dialog opens and `then` runs once installed.
+    bool requireDenoiser(std::function<void()> then);
+    void denoiseSettingsChanged();
+    void denoiseUnused();                          // frees the devices when nothing is denoised any more
+    int denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& layers) const;   // layer index; -1 = none
+    void drawFilterPanel(float x, float y, float w, float h);
+    void drawGuideCombo(const char* id, GuideKind kind, float width);
+    void drawDenoiseDownload();                    // modal: what is downloaded, where, progress
+    ImagePtr stackImage(const FrameSetPtr& set, const StackLayer& s) const;   // filtered, else as decoded
+
     // Where the image is on screen (screen pixels, y down), as GLViewer::draw places it.
     // half: -1 whole viewport, 0 / 1 left / right half (side-by-side compare).
     struct ScreenRect { float x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
@@ -222,6 +251,7 @@ private:
     void drawBatchDialog();
     void processBatch();
     void startBatch();
+    void endBatchDenoise();                        // the view's denoise as it was before the batch
     void cancelBatch();
 
     // Update check (UpdateUI.cpp)
@@ -367,6 +397,16 @@ private:
     unsigned m_waveTex = 0, m_vectorTex = 0;
     bool m_scopesValid = false;
 
+    // Filters. The denoise is not saved: every session starts without it (nothing loaded at startup).
+    bool m_filterPanel = false;
+    bool m_denoise = false;
+    std::string m_guideAlbedo, m_guideNormal, m_guideFlow;   // EXR layer labels; "" = automatic, "-" = none
+    bool m_openDenoiseDownload = false;
+    std::shared_ptr<OidnInstall> m_oidnInstall; // download running or finished (until the dialog closes)
+    std::function<void()> m_afterOidnInstall;   // what asked for the download (filter on, batch start)
+    bool m_batchDenoiseSaved = false;           // the view's denoise state while a batch overrides it
+    std::string m_oidnRemoveError;
+
     // Metadata panel
     bool m_infoPanel = false;
     std::vector<MetaEntry> m_meta;
@@ -428,6 +468,8 @@ private:
 
     // ui state
     std::wstring m_pendingOpen;           // waits for the replace confirmation
+    struct OpenState;
+    std::shared_ptr<OpenState> m_opening;   // a slow open still running on its worker
     bool m_openReplace = false, m_replaceDontAsk = false;
     bool m_openSettings = false;
     bool m_openAbout = false;

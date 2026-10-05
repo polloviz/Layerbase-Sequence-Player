@@ -6,3 +6,5 @@ dist/
 press/
 # 165 MB, over GitHub's file limit: tools/get_ffmpeg.ps1 downloads it (build.ps1 does it automatically)
 third_party/ffmpeg/ffmpeg.exe
+# NVIDIA OptiX SDK headers: not redistributable, tools/get_optix.ps1 downloads them (build.ps1 does it automatically)
+third_party/optix/

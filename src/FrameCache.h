@@ -1,4 +1,5 @@
 #pragma once
+#include "Denoise.h"
 #include "ExrLayers.h"
 #include "Image.h"
 #include "Sequence.h"
@@ -18,6 +19,7 @@ struct LayerLoad {
     // File per frame of the sequence ("" = none for that frame); null = the sequence's own frames.
     std::shared_ptr<const std::vector<std::wstring>> files;
     LoadOptionsPtr opts;
+    DenoiseSpecPtr denoise;   // filter applied after decoding (its guides come from the same file); in `key`
 };
 struct LoadPlan {
     std::vector<LayerLoad> layers;

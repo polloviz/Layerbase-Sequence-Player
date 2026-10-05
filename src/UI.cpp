@@ -142,15 +142,18 @@ void App::drawUI()
     drawReplaceConfirm();
     drawFrameReport();
     drawScopes();
+    drawDenoiseDownload();
 
     const float vh = std::max(1.0f, vp->Size.y - m_topBarH - m_bottomBarH);
     if (m_cryptoPanel || m_stackPanel) m_infoPanel = false;   // one side panel at a time
-    const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel || m_infoPanel);
-    m_panelW = panel ? std::round((m_stackPanel ? 330 : m_cryptoPanel ? 310 : 360) * m_dpiScale) : 0.0f;
+    if (m_cryptoPanel || m_stackPanel || m_infoPanel) m_filterPanel = false;   // its button closes the others
+    const bool panel = m_uiVisible && m_seq && (m_cryptoPanel || m_stackPanel || m_infoPanel || m_filterPanel);
+    m_panelW = panel ? std::round((m_stackPanel || m_filterPanel ? 330 : m_cryptoPanel ? 310 : 360) * m_dpiScale) : 0.0f;
     if (m_panelW > 0) {
         const float px = vp->Pos.x + vp->Size.x - m_panelW, py = vp->Pos.y + m_topBarH;
         if (m_stackPanel) drawStackPanel(px, py, m_panelW, vh);
         else if (m_cryptoPanel) drawCryptoPanel(px, py, m_panelW, vh);
+        else if (m_filterPanel) drawFilterPanel(px, py, m_panelW, vh);
         else drawInfoPanel(px, py, m_panelW, vh);
     }
     const float vx = vp->Pos.x, vy = vp->Pos.y + m_topBarH;
@@ -651,7 +654,8 @@ void App::drawTransport()
     const float wAlphaCombo = 128 * s;
     const float wAlpha = alphaCombo ? wAlphaCombo + st.ItemSpacing.x : 0;
     auto buttonW = [&](const char* t) { return ImGui::CalcTextSize(t).x + st.FramePadding.x * 2 + st.ItemSpacing.x; };
-    const float wPanels = n > 0 ? buttonW("A/B") + buttonW("QC") + buttonW(tr(S::Info)) + buttonW(tr(S::Stack)) + buttonW("Cryptomatte") : 0;
+    const float wPanels = n > 0 ? buttonW("A/B") + buttonW("QC") + buttonW(tr(S::Info)) + buttonW(tr(S::Filters)) + buttonW(tr(S::Stack)) +
+                                      buttonW("Cryptomatte") : 0;
     const float rightW = wLayer + wAlpha + wPanels + wLoop + wFps + wRes + wCh + wZoom + wActual + st.ItemSpacing.x * 4;
     ImGui::SetCursorPos(ImVec2(windowW - st.WindowPadding.x - rightW, rowY));
 
@@ -676,6 +680,16 @@ void App::drawTransport()
         }
         if (m_infoPanel) ImGui::PopStyleColor();
         ImGui::SetItemTooltip("%s  (Ctrl+I)", tr(S::Metadata));
+        ImGui::SameLine();
+
+        const bool filtersOn = m_filterPanel || denoiseInUse();
+        if (filtersOn) ImGui::PushStyleColor(ImGuiCol_Button, onColor);
+        if (ImGui::Button(tr(S::Filters))) {
+            m_filterPanel = !m_filterPanel;
+            if (m_filterPanel) m_cryptoPanel = m_stackPanel = m_infoPanel = false;
+        }
+        if (filtersOn) ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%s", tr(S::Denoise));
         ImGui::SameLine();
 
         const bool stackOn = m_stackPanel || stackActive();
@@ -788,8 +802,9 @@ void App::drawEmptyState(float vx, float vy, float vw, float vh)
     dl->AddTriangleFilled(ImVec2(c.x - 8 * s, c.y - 30 * s - 10 * s), ImVec2(c.x - 8 * s, c.y - 30 * s + 10 * s),
                           ImVec2(c.x + 11 * s, c.y - 30 * s), IM_COL32(74, 143, 255, 160));
 
-    const char* l1 = tr(S::DropHint);
-    const char* l2 = tr(S::DropHint2);
+    // An open still running (a cloud file downloading): the toast says what is going on.
+    const char* l1 = m_opening ? "" : tr(S::DropHint);
+    const char* l2 = m_opening ? "" : tr(S::DropHint2);
     const float fs = ImGui::GetFontSize();
     ImVec2 t1 = ImGui::CalcTextSize(l1);
     dl->AddText(nullptr, fs * 1.25f, ImVec2(c.x - t1.x * 1.25f * 0.5f, c.y + 18 * s), kText, l1);
@@ -844,6 +859,16 @@ void App::drawOverlays(float vx, float vy, float vw, float vh)
     }
     if (!m_colorManaged) x += badge(ImVec2(x, y), "OCIO OFF", IM_COL32(255, 180, 90, 255)) + 6 * s;
     if (m_seq && m_planProxy > 1) x += badge(ImVec2(x, y), m_planProxy == 2 ? "PROXY 1:2" : "PROXY 1:4", kText) + 6 * s;
+    if (m_seq && denoiseInUse()) {
+        // Until its denoised version is ready the previous image stays up: "..." says so.
+        const bool shownDenoised = m_shownSet && m_shownSet->plan && m_shownSet == m_cache.get(m_index) &&
+                                   std::any_of(m_shownSet->plan->layers.begin(), m_shownSet->plan->layers.end(),
+                                               [](const LayerLoad& l) { return l.denoise != nullptr; });
+        std::string text = (DenoiseEngine)m_settings.denoiseEngine == DenoiseEngine::Oidn ? "DENOISE OIDN"
+                         : m_settings.optixTemporal ? "DENOISE OPTIX TEMPORAL" : "DENOISE OPTIX";
+        if (!shownDenoised) text += " \xE2\x80\xA6";
+        x += badge(ImVec2(x, y), text.c_str(), shownDenoised ? kAccent : kTextDim) + 6 * s;
+    }
     if (m_seq && m_check == CheckMode::FalseColor) x += badge(ImVec2(x, y), "FALSE COLOR", kText) + 6 * s;
     if (m_seq && m_check == CheckMode::Zebra) x += badge(ImVec2(x, y), "ZEBRA", kText) + 6 * s;
     if (m_seq && m_check == CheckMode::BadPixels) {

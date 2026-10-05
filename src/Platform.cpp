@@ -7,6 +7,7 @@
 #include <shobjidl.h>
 #include <shellapi.h>
 #include <winhttp.h>
+#include <bcrypt.h>
 #include <algorithm>
 #include <cstring>
 #include <cwctype>
@@ -16,6 +17,7 @@
 
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "bcrypt.lib")   // delay-loaded (CMakeLists.txt): only used to verify downloads
 
 std::string ToUtf8(const std::wstring& w)
 {
@@ -73,6 +75,21 @@ std::wstring GetAppDataDir()
     PWSTR p = nullptr;
     std::wstring dir;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &p))) {
+        dir = std::wstring(p) + L"\\SequencePlayer";
+        CoTaskMemFree(p);
+        CreateDirectoryW(dir.c_str(), nullptr);
+    }
+    return dir;
+}
+
+std::wstring GetLocalDataDir()
+{
+    // Portable: next to the settings, so the whole folder moves together.
+    const std::wstring roaming = GetAppDataDir();
+    if (IsPortable() && roaming == GetParentDir(GetExePath()) + L"\\data") return roaming;
+    PWSTR p = nullptr;
+    std::wstring dir = roaming;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p))) {
         dir = std::wstring(p) + L"\\SequencePlayer";
         CoTaskMemFree(p);
         CreateDirectoryW(dir.c_str(), nullptr);
@@ -553,4 +570,90 @@ bool HttpGet(const std::wstring& url, std::string& body, int timeoutMs)
     }
     WinHttpCloseHandle(session);
     return ok;
+}
+
+bool HttpDownload(const std::wstring& url, const std::wstring& file,
+                  const std::function<bool(uint64_t, uint64_t)>& progress, std::string& err)
+{
+    URL_COMPONENTS uc{ sizeof(uc) };
+    wchar_t host[256] = {}, path[2048] = {};
+    uc.lpszHostName = host;
+    uc.dwHostNameLength = (DWORD)std::size(host);
+    uc.lpszUrlPath = path;
+    uc.dwUrlPathLength = (DWORD)std::size(path);
+    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) { err = "invalid URL"; return false; }
+
+    const std::wstring agent = std::wstring(APP_NAME_W) + L"/" + FromUtf8(APP_VERSION);
+    HINTERNET session = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                                    WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) { err = "WinHTTP unavailable"; return false; }
+    WinHttpSetTimeouts(session, 15000, 15000, 30000, 30000);
+    bool ok = false;
+    err = "connection failed";
+    if (HINTERNET conn = WinHttpConnect(session, host, uc.nPort, 0)) {
+        const DWORD flags = uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0;
+        if (HINTERNET req = WinHttpOpenRequest(conn, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags)) {
+            if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+                WinHttpReceiveResponse(req, nullptr)) {
+                DWORD status = 0, size = sizeof(status);
+                WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
+                                    &status, &size, WINHTTP_NO_HEADER_INDEX);
+                wchar_t lenText[32] = {};
+                DWORD lenSize = sizeof(lenText);
+                const uint64_t total = WinHttpQueryHeaders(req, WINHTTP_QUERY_CONTENT_LENGTH, WINHTTP_HEADER_NAME_BY_INDEX,
+                                                           lenText, &lenSize, WINHTTP_NO_HEADER_INDEX) ? _wcstoui64(lenText, nullptr, 10) : 0;
+                HANDLE out = status == 200 ? CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)
+                                           : INVALID_HANDLE_VALUE;
+                if (status != 200) err = "HTTP " + std::to_string(status);
+                else if (out == INVALID_HANDLE_VALUE) err = "cannot write " + ToUtf8(file);
+                else {
+                    std::vector<char> chunk(1 << 16);
+                    uint64_t received = 0;
+                    ok = true;
+                    for (;;) {
+                        DWORD got = 0, written = 0;
+                        if (!WinHttpReadData(req, chunk.data(), (DWORD)chunk.size(), &got)) { ok = false; err = "download interrupted"; break; }
+                        if (got == 0) break;
+                        if (!WriteFile(out, chunk.data(), got, &written, nullptr) || written != got) { ok = false; err = "disk write failed"; break; }
+                        received += got;
+                        if (progress && !progress(received, total)) { ok = false; err = "cancelled"; break; }
+                    }
+                    if (ok && total && received != total) { ok = false; err = "download incomplete"; }
+                    CloseHandle(out);
+                    if (!ok) DeleteFileW(file.c_str());
+                }
+            }
+            WinHttpCloseHandle(req);
+        }
+        WinHttpCloseHandle(conn);
+    }
+    WinHttpCloseHandle(session);
+    if (ok) err.clear();
+    return ok;
+}
+
+std::string FileSha256(const std::wstring& path)
+{
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return {};
+    std::string out;
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    if (BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0)) &&
+        BCRYPT_SUCCESS(BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0))) {
+        std::vector<uint8_t> buf(1 << 20);
+        DWORD got = 0;
+        bool ok = true;
+        while (ok && ReadFile(f, buf.data(), (DWORD)buf.size(), &got, nullptr) && got > 0)
+            ok = BCRYPT_SUCCESS(BCryptHashData(hash, buf.data(), got, 0));
+        uint8_t digest[32];
+        if (ok && BCRYPT_SUCCESS(BCryptFinishHash(hash, digest, sizeof(digest), 0))) {
+            static const char* hex = "0123456789ABCDEF";
+            for (uint8_t b : digest) { out += hex[b >> 4]; out += hex[b & 15]; }
+        }
+    }
+    if (hash) BCryptDestroyHash(hash);
+    if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    CloseHandle(f);
+    return out;
 }

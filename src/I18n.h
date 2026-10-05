@@ -256,6 +256,7 @@ enum class Lang { English = 0, Italian = 1 };
     X(LiveRefreshHint,  "New and re-rendered frames appear by themselves; frames that could not be read are read again.", "I frame nuovi e quelli renderizzati di nuovo compaiono da soli; i frame illeggibili vengono riletti.") \
     X(FramesAdded,      "new frames", "nuovi frame") \
     X(FramesUpdated,    "frames updated", "frame aggiornati") \
+    X(Opening,          "Opening (waiting for the cloud or network drive)", "Apertura (in attesa del disco cloud o di rete)") \
     X(Version,          "Version", "Versione") \
     X(VersionHint,      "Versions of this render next to it (Alt+Up / Alt+Down). Frame, In/Out, color, stack and compare are kept.", "Versioni di questo render accanto a esso (Alt+Su / Alt+Giù). Frame, In/Out, colore, stack e confronto restano.") \
     X(NoNewerVersion,   "No newer version", "Nessuna versione più recente") \
@@ -325,7 +326,59 @@ enum class Lang { English = 0, Italian = 1 };
     X(BurnFrame,        "Frame", "Frame") \
     X(BurnTimecode,     "Timecode", "Timecode") \
     X(BurnDate,         "Date", "Data") \
-    X(BurnText,         "Custom text", "Testo libero")
+    X(BurnText,         "Custom text", "Testo libero") \
+    X(Filters,          "Filters", "Filtri") \
+    X(Denoise,          "Denoise", "Riduzione rumore") \
+    X(DenoiseHint,      "Removes the render noise of the viewed sequence. Each frame is denoised once, then plays from the cache; exports use the denoised frames.", "Rimuove il rumore di render della sequenza visualizzata. Ogni frame viene ripulito una volta e poi riprodotto dalla cache; gli export usano i frame ripuliti.") \
+    X(DenoiseEngine,    "Engine", "Motore") \
+    X(EngineOidn,       "Open Image Denoise (Intel) \xC2\xB7 CPU or GPU", "Open Image Denoise (Intel) \xC2\xB7 CPU o GPU") \
+    X(EngineOptix,      "OptiX (NVIDIA) \xC2\xB7 GPU", "OptiX (NVIDIA) \xC2\xB7 GPU") \
+    X(DenoiseDevice,    "Device", "Dispositivo") \
+    X(DeviceAuto,       "Automatic (fastest)", "Automatico (il più veloce)") \
+    X(DeviceCpu,        "CPU", "CPU") \
+    X(DeviceGpu,        "GPU", "GPU") \
+    X(DnQualityHigh,    "High (final frames)", "Alta (frame finali)") \
+    X(DnQualityBalanced, "Balanced", "Bilanciata") \
+    X(DnQualityFast,    "Fast (preview)", "Veloce (anteprima)") \
+    X(DenoiseGuides,    "Guides (EXR layers)", "Guide (layer EXR)") \
+    X(GuideAlbedo,      "Albedo", "Albedo") \
+    X(GuideNormal,      "Normal", "Normali") \
+    X(GuideAuto,        "Automatic", "Automatico") \
+    X(GuideOff,         "None", "Nessuna") \
+    X(GuidesHint,       "Albedo and normal passes of the same EXR (e.g. Denoising Albedo / Denoising Normal) keep textures and edges sharp. A normal guide needs an albedo guide.", "I pass albedo e normali dello stesso EXR (es. Denoising Albedo / Denoising Normal) mantengono nitidi texture e bordi. La guida normali richiede quella albedo.") \
+    X(GuidesNoLayers,   "Only multilayer EXR files have guide layers.", "Solo gli EXR multilayer hanno layer guida.") \
+    X(OidnNotInstalled, "Open Image Denoise is not installed yet: the first use needs a one-time download.", "Open Image Denoise non è ancora installato: il primo utilizzo richiede un download (una sola volta).") \
+    X(OidnDownloadInfo, "Downloads Intel Open Image Denoise %s (%d MB) from github.com/RenderKit/oidn, checks it and keeps the libraries (%d MB) in:", "Scarica Intel Open Image Denoise %s (%d MB) da github.com/RenderKit/oidn, lo verifica e salva le librerie (%d MB) in:") \
+    X(OidnDownloadInfo2, "They are loaded only while the denoiser is in use: opening the program stays as fast as before. License: Apache 2.0.", "Vengono caricate solo mentre il denoiser è in uso: l'apertura del programma resta veloce come prima. Licenza: Apache 2.0.") \
+    X(DownloadRequired, "Download required", "Download necessario") \
+    X(DownloadAndEnable, "Download and enable", "Scarica e attiva") \
+    X(DownloadOidn,     "Download Open Image Denoise...", "Scarica Open Image Denoise...") \
+    X(Downloading,      "Downloading", "Download in corso") \
+    X(Verifying,        "Verifying the download...", "Verifica del download...") \
+    X(Extracting,       "Extracting...", "Estrazione...") \
+    X(OidnInstalled,    "Open Image Denoise installed", "Open Image Denoise installato") \
+    X(DownloadFailed,   "Download failed", "Download non riuscito") \
+    X(Retry,            "Retry", "Riprova") \
+    X(InstalledIn,      "Installed in", "Installato in") \
+    X(RemoveLibraries,  "Remove", "Rimuovi") \
+    X(RemoveLibrariesHint, "Deletes the downloaded libraries. They are downloaded again on the next use.", "Elimina le librerie scaricate. Verranno scaricate di nuovo al prossimo utilizzo.") \
+    X(OptixInfo,        "Part of the NVIDIA driver: nothing to download. Needs an NVIDIA GPU with driver R535 or later.", "Fa parte del driver NVIDIA: niente da scaricare. Richiede una GPU NVIDIA con driver R535 o successivo.") \
+    X(OptixNoDriver,    "No NVIDIA driver found on this computer.", "Nessun driver NVIDIA trovato su questo computer.") \
+    X(OptixNotBuilt,    "This build does not include OptiX.", "Questa build non include OptiX.") \
+    X(MsPerFrame,       "ms per frame", "ms per frame") \
+    X(DenoiseBusy,      "denoising...", "denoise in corso...") \
+    X(DenoiseNoStack,   "Not applied to the AOV stack: it works on the single view.", "Non si applica allo stack AOV: lavora sulla vista singola.") \
+    X(DenoiseFlicker,   "Frames are denoised one at a time: slight flicker between frames is possible; guides reduce it.", "I frame vengono ripuliti uno alla volta: è possibile un leggero sfarfallio tra i frame; le guide lo riducono.") \
+    X(DenoiseStackHint, "In the AOV stack the denoise is turned on per layer (Stack panel); the engine and the guides set here apply to every layer.", "Nello stack AOV il denoise si attiva per singolo layer (pannello Stack); motore e guide impostati qui valgono per tutti i layer.") \
+    X(DenoiseLayerHint, "Engine and guides: Filters panel", "Motore e guide: pannello Filtri") \
+    X(OptixTemporal,    "Temporal (no flicker between frames)", "Temporale (niente sfarfallio tra i frame)") \
+    X(OptixTemporalHint, "Frames are denoised in order, each one together with the previous denoised frame. A jump in the timeline starts a new chain.", "I frame vengono ripuliti in ordine, ognuno insieme al frame precedente già ripulito. Un salto nella timeline fa ripartire la catena.") \
+    X(GuideMotion,      "Motion", "Movimento") \
+    X(FlowInvert,       "Invert", "Inverti") \
+    X(FlowFlipY,        "Flip Y", "Inverti Y") \
+    X(GuidesTemporalHint, "Motion vectors (e.g. the Cycles Vector pass) let the previous frame follow moving objects; without them it is assumed still and moving objects can trail. If they trail more with vectors, try Invert or Flip Y. The temporal model uses no normal guide.", "I motion vector (es. il pass Vector di Cycles) fanno seguire al frame precedente gli oggetti in movimento; senza, viene considerato fermo e gli oggetti in movimento possono lasciare scie. Se con i vettori le scie aumentano, prova Inverti o Inverti Y. Il modello temporale non usa la guida normali.") \
+    X(BatchDenoise,     "Denoise every sequence", "Ripulisci ogni sequenza") \
+    X(BatchDenoiseHint, "With the engine and guides of the Filters panel.", "Con motore e guide del pannello Filtri.")
 
 enum class S {
 #define X(id, en, it) id,

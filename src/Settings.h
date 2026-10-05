@@ -25,6 +25,13 @@ struct Settings {
     // Viewer guides
     int guideAspect = 0;                     // AspectRatio index; 0 = none
     bool guideSafe = false, guideCenter = false, guideThirds = false;
+    // Denoise filter (the on/off state is not saved)
+    int denoiseEngine = 0;                   // DenoiseEngine: 0 Open Image Denoise, 1 OptiX
+    int oidnDevice = 0;                      // OidnDevice: 0 auto, 1 CPU, 2 GPU
+    int oidnQuality = 0;                     // OidnQuality: 0 high, 1 balanced, 2 fast
+    bool optixTemporal = false;              // OptiX: chain frames (less flicker)
+    bool flowInvert = false, flowFlipY = false;   // motion vector convention of the renderer
+    bool batchDenoise = false;               // batch conversion denoises every sequence
 
     // Movie export
     int exportCodec = 0, exportQuality = 0, exportScale = 100;

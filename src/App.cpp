@@ -14,9 +14,13 @@
 #include <imgui_impl_win32.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <ctime>
 #include <future>
+#include <mutex>
+#include <thread>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -59,8 +63,13 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     applyCacheBudget();
 
     // Start decoding the first frames before any window/GL/OCIO work.
+    // A slow drive opens it after the window is up; a command-line export waits for it.
     if (!initialPath.empty()) {
-        openPath(initialPath);
+        openPath(initialPath, true, [this, opts, fpsOverride, autoplay] {
+            applyStartupLayers(opts);
+            if (fpsOverride > 0) m_fps = fpsOverride;
+            if (autoplay && frameCount() > 1) setPlaying(1);
+        }, !opts.exportPath.empty());
         // Explorer launches one process per selected file: if another instance
         // already has this sequence, bring it forward and quit.
         if (m_seqOpenElsewhere) {
@@ -68,8 +77,6 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
             return 0;
         }
     }
-    applyStartupLayers(opts);
-    if (fpsOverride > 0) m_fps = fpsOverride;
     Log("sequence opened (%d frames)", frameCount());
 
     // OCIO config + GPU processor are built on a worker while the GL driver
@@ -111,9 +118,38 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         m_cliExport = opts;
         m_batchMode = true;
     }
-    // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack|replace opens a dialog/panel at startup (with SP_DUMP for
-    // screenshots); SP_TEST_LUT=<file> loads a LUT.
+    // --denoise oidn|oidn-cpu|oidn-gpu|optix|optix-temporal: the export or batch output is denoised
+    // (with --export / --batch only: those runs never save the settings it changes).
+    bool cliFailed = false;
+    if (!opts.denoise.empty() && opts.exportPath.empty() && opts.batchRoot.empty()) Log("--denoise needs --export or --batch: ignored");
+    else if (!opts.denoise.empty()) {
+        const std::string& d = opts.denoise;
+        const bool optix = d.rfind("optix", 0) == 0;
+        m_settings.denoiseEngine = optix ? 1 : 0;
+        m_settings.optixTemporal = d == "optix-temporal";
+        if (d == "oidn-cpu") m_settings.oidnDevice = 1;
+        else if (d == "oidn-gpu") m_settings.oidnDevice = 2;
+        if (!optix && !OidnInstalled()) {
+            // Never downloaded without asking: the first download happens in the Filters panel.
+            Log("denoise: Open Image Denoise is not installed; turn the denoise on once in the Filters panel to download it");
+            cliFailed = true;
+            m_cliExport = StartupOptions();
+            m_exitCode = 1;
+            PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+        } else if (!opts.batchRoot.empty()) {
+            m_settings.batchDenoise = true;
+        } else {
+            setDenoise(true);
+        }
+    }
+    // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack|filters|replace opens a dialog/panel at startup (with SP_DUMP for
+    // screenshots); SP_TEST_LUT=<file> loads a LUT; SP_TEST_DENOISE=oidn|optix|optix-temporal turns the denoise on.
     if (const wchar_t* l = _wgetenv(L"SP_TEST_LUT")) setLut(ToUtf8(l));
+    if (const wchar_t* d = _wgetenv(L"SP_TEST_DENOISE")) {
+        m_settings.denoiseEngine = std::wstring(d).rfind(L"optix", 0) == 0 ? 1 : 0;
+        m_settings.optixTemporal = std::wstring(d) == L"optix-temporal";
+        setDenoise(true);
+    }
     if (const wchar_t* t = _wgetenv(L"SP_TEST_OPEN")) {
         const std::wstring w = t;
         if (w == L"about") m_openAbout = true;
@@ -122,6 +158,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         if (w == L"stack") m_stackPanel = true;
         if (w == L"settings") m_openSettings = true;
         if (w == L"info") m_infoPanel = true;
+        if (w == L"filters") m_filterPanel = true;
         if (w == L"scopes") m_scopesOpen = true;
         if (w == L"report" || w == L"reportcheck") m_reportOpen = true;
         if (w == L"reportcheck") startFrameCheck();
@@ -143,7 +180,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         m_settings.guideSafe = m_settings.guideThirds = m_settings.guideCenter = true;
     }
     if (const wchar_t* v = _wgetenv(L"SP_TEST_VERSION")) switchVersion(_wtoi(v));
-    if (!opts.batchRoot.empty()) {
+    if (!opts.batchRoot.empty() && !cliFailed) {
         m_batchMode = true;           // settings below are for this run only
         m_quitAfterBatch = true;
         openBatchDialog();
@@ -176,7 +213,6 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
             startBatch();
         }
     }
-    if (autoplay && frameCount() > 1) setPlaying(1);
     frame();
     Log("first frame presented");
     if (!m_batchMode && m_settings.checkUpdates && std::time(nullptr) - m_settings.lastUpdateCheck >= 24 * 3600)
@@ -187,7 +223,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
     while (!quit) {
         const bool animating = m_playDir != 0 || m_scrubbing || m_renderFrames > 0 || m_exporter || m_batchRunning;
         if (!animating) {
-            const bool poll = m_toastUntil > Now() || m_refreshFirst > 0.0;
+            const bool poll = m_toastUntil > Now() || m_refreshFirst > 0.0 || m_opening;
             const DWORD timeout = poll || _wtoi(_wgetenv(L"SP_DUMP") ? _wgetenv(L"SP_DUMP") : L"0") > 1 ? 100 : INFINITE;
             MsgWaitForMultipleObjectsEx(0, nullptr, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             m_renderFrames = 1;
@@ -200,6 +236,7 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
             m_renderFrames = 3;   // ImGui needs a few frames to settle after input
         }
         if (quit) break;
+        pollOpen();
         frame();
         runDeferred();
         if (m_renderFrames > 0) --m_renderFrames;
@@ -486,10 +523,78 @@ void App::applyCacheBudget()
     m_cache.setBudget((size_t)bytes);
 }
 
-void App::openPath(const std::wstring& path, bool addToRecent)
-{
+// The disk work of an open. Reading the header of an online-only file (OneDrive, Dropbox,
+// Google Drive) downloads the whole file first, so it never runs on the UI thread unbounded.
+struct App::OpenState {
+    std::wstring path;
+    bool addToRecent = true;
+    bool startup = false;
+    std::function<void()> then;
+    HWND notify = nullptr;
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool done = false;
+    // results
+    Sequence seq;
     int start = 0;
-    Sequence seq = DetectSequence(path, &start);
+    ExrInfo exr;
+};
+
+void App::openPath(const std::wstring& path, bool addToRecent, std::function<void()> then, bool wait)
+{
+    auto st = std::make_shared<OpenState>();
+    st->path = path;
+    st->addToRecent = addToRecent;
+    st->startup = !m_ready;
+    st->then = std::move(then);
+    st->notify = m_hwnd;
+    m_opening = st;   // supersedes an open still running
+    // Detached: the state is shared, and a stuck download must not hold the UI or the exit.
+    std::thread([st] {
+        int start = 0;
+        Sequence seq = DetectSequence(st->path, &start);
+        ExrInfo exr;
+        if (!seq.empty() && GetFileExtension(seq.frames[0].path) == L".exr") exr = ReadExrInfo(seq.frames[start].path);
+        {
+            std::lock_guard lock(st->mutex);
+            st->seq = std::move(seq);
+            st->start = start;
+            st->exr = std::move(exr);
+            st->done = true;
+        }
+        st->cv.notify_all();
+        if (st->notify) PostMessageW(st->notify, WM_NULL, 0, 0);   // wake the idle message loop
+    }).detach();
+
+    // A local disk answers well within this: the open completes right here, as it always did.
+    {
+        std::unique_lock lock(st->mutex);
+        if (wait) st->cv.wait(lock, [&] { return st->done; });
+        else st->cv.wait_for(lock, std::chrono::milliseconds(150), [&] { return st->done; });
+    }
+    if (st->done) {
+        pollOpen();
+        return;
+    }
+    Log("open: waiting for %s", ToUtf8(path).c_str());
+    showToast(std::string(tr(S::Opening)) + ": " + ToUtf8(GetFileName(path)));
+    m_toastUntil = Now() + 24 * 3600.0;   // until the open ends (keeps the idle loop polling)
+}
+
+void App::pollOpen()
+{
+    if (!m_opening) return;
+    {
+        std::lock_guard lock(m_opening->mutex);
+        if (!m_opening->done) return;
+    }
+    const auto st = std::move(m_opening);
+    m_opening.reset();
+    m_renderFrames = 3;
+    if (m_toastUntil > Now() + 3600.0) m_toastUntil = 0.0;   // the "opening" toast
+    const std::wstring& path = st->path;
+    Sequence& seq = st->seq;
+    const int start = st->start;
     if (seq.empty()) {
         showToast(std::string(tr(S::LoadError)) + ": " + ToUtf8(GetFileName(path)), true);
         return;
@@ -506,7 +611,7 @@ void App::openPath(const std::wstring& path, bool addToRecent)
 
     // EXR layers: keep the previously viewed layer when the new shot has it.
     const std::string prevLayer = currentLayerLabel();
-    m_exrInfo = m_seqExt == L".exr" ? ReadExrInfo(m_seq->frames[start].path) : ExrInfo();
+    m_exrInfo = std::move(st->exr);
     m_layer = m_exrInfo.defaultLayer;
     for (size_t i = 0; i < m_exrInfo.layers.size(); ++i)
         if (m_exrInfo.layers[i].label == prevLayer) m_layer = (int)i;
@@ -538,8 +643,15 @@ void App::openPath(const std::wstring& path, bool addToRecent)
     m_inputUserChosen = false;
     chooseInputForSequence();
     claimSequence();
-    if (addToRecent) Settings::PushRecent(m_settings.recentFiles, ToUtf8(path));
+    if (st->addToRecent) Settings::PushRecent(m_settings.recentFiles, ToUtf8(path));
     updateTitle();
+    // Opened after the window came up: the duplicate check of run() is done here.
+    if (st->startup && m_seqOpenElsewhere && m_hwnd) {
+        activateOtherInstance();
+        PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+        return;
+    }
+    if (st->then) st->then();
     if (m_ready) startWatching();   // at startup: once the first frame is up
 }
 
@@ -1027,7 +1139,7 @@ void App::handleViewerInput(float vx, float vy, float vw, float vh)
         ImagePtr src = img;
         if (stackActive()) {
             const StackLayer& s = m_stack[std::clamp(m_stackSel, 0, (int)m_stack.size() - 1)];
-            src = m_shownSet ? m_shownSet->find(s.key) : nullptr;
+            src = stackImage(m_shownSet, s);
             m_hoverLayer = s.name;
         } else if (m_hoverB) {
             src = compareImage(m_shownSet);

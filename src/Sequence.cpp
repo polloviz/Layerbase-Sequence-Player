@@ -33,14 +33,20 @@ int Sequence::indexOfNumber(int number) const
 
 static uint64_t Join(DWORD high, DWORD low) { return (uint64_t(high) << 32) | low; }
 
-// Files (or folders, with dirs) of `dir` matching the pattern.
+// Files (or folders, with dirs) of `dir` matching the pattern. The pattern only narrows the
+// listing: callers check every name themselves.
 template <class F>
 static void EnumerateDir(const std::wstring& dir, const std::wstring& pattern, F&& fn, bool dirs = false)
 {
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileExW((dir + L"\\" + pattern).c_str(), FindExInfoBasic, &fd,
                                 FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) {
+        // Windows hands "a.*.exr" to the file system as DOS wildcards (a"<.exr), which some
+        // virtual drives (cloud sync, FUSE-style mounts) do not match: list everything instead.
+        if (pattern != L"*" && GetLastError() == ERROR_FILE_NOT_FOUND) EnumerateDir(dir, L"*", fn, dirs);
+        return;
+    }
     do {
         const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         if (isDir == dirs && fd.cFileName[0] != L'.') fn(fd);

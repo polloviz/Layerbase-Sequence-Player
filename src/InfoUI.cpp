@@ -45,9 +45,11 @@ void App::drawInfoPanel(float x, float y, float w, float h)
     if (ImGui::SmallButton("x")) m_infoPanel = false;
 
     // Read again when the frame (or its file) changes; a few times a second while playing.
+    // Only once the frame is decoded: the file is then local (an online-only cloud file would
+    // otherwise download here, on the UI thread) and in the OS cache.
     const SequenceFrame& f = m_seq->frames[m_index];
     const double now = Seconds();
-    if ((f.path != m_metaPath || f.stamp != m_metaStamp) && (m_playDir == 0 || now - m_metaAt > 0.25)) {
+    if ((f.path != m_metaPath || f.stamp != m_metaStamp) && (m_playDir == 0 || now - m_metaAt > 0.25) && m_cache.get(m_index)) {
         m_meta = ReadMetadata(f.path);
         m_metaPath = f.path;
         m_metaStamp = f.stamp;

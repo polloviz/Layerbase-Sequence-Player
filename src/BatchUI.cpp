@@ -76,6 +76,8 @@ void App::batchAddPaths(const std::vector<std::wstring>& paths)
 
 void App::startBatch()
 {
+    // Open Image Denoise not downloaded yet: ask first, the batch starts once it is installed.
+    if (m_settings.batchDenoise && !requireDenoiser([this] { startBatch(); })) return;
     for (auto& it : m_batch) {
         if (it.include) it.state = BatchItem::State::Pending;
         it.message.clear();
@@ -90,7 +92,17 @@ void App::startBatch()
     m_settings.exportScale = m_batchOpt.scalePercent;
     m_settings.exportHardware = m_batchOpt.hardware;
     m_settings.exportPremultiplied = m_batchOpt.premultiplied;
-    Log("batch started: %d sequences", (int)m_batch.size());
+    // Every sequence of the batch is opened in the view: its denoise follows the batch option.
+    m_batchDenoiseSaved = m_denoise;
+    m_denoise = m_settings.batchDenoise;
+    Log("batch started: %d sequences%s", (int)m_batch.size(), m_denoise ? ", denoised" : "");
+}
+
+void App::endBatchDenoise()
+{
+    m_denoise = m_batchDenoiseSaved;
+    if (m_seq) applyLoadPlan();
+    denoiseUnused();
 }
 
 void App::cancelBatch()
@@ -98,6 +110,7 @@ void App::cancelBatch()
     for (auto& it : m_batch)
         if (it.state == BatchItem::State::Pending || it.state == BatchItem::State::Running) it.state = BatchItem::State::Cancelled;
     m_batchRunning = m_batchWaitingFrame = m_batchAwaitingResult = false;
+    endBatchDenoise();
     m_openBatch = true;
 }
 
@@ -143,6 +156,7 @@ void App::processBatch()
     while (next < (int)m_batch.size() && !(m_batch[next].include && m_batch[next].state == BatchItem::State::Pending)) ++next;
     if (next >= (int)m_batch.size()) {
         m_batchRunning = false;
+        endBatchDenoise();
         int done = 0, failed = 0, skipped = 0;
         for (auto& it : m_batch) {
             done += it.state == BatchItem::State::Done;
@@ -186,7 +200,7 @@ void App::processBatch()
         return;
     }
     it.state = BatchItem::State::Running;
-    openPath(it.path, false);
+    openPath(it.path, false, {}, true);
     if (!m_batchLayer.empty() && m_settings.batchUseLayer)
         for (size_t i = 0; i < m_exrInfo.layers.size(); ++i)
             if (m_exrInfo.layers[i].label == m_batchLayer) setLayer((int)i);
@@ -314,6 +328,19 @@ void App::drawBatchDialog()
             const std::string l = std::string(tr(S::UseLayer)) + ": " + m_batchLayer;
             ImGui::Checkbox(l.c_str(), &m_settings.batchUseLayer);
         }
+
+        row(tr(S::Denoise));
+        ImGui::Checkbox(tr(S::BatchDenoise), &m_settings.batchDenoise);
+        if (m_settings.batchDenoise) {
+            ImGui::SameLine();
+            const bool optix = (DenoiseEngine)m_settings.denoiseEngine == DenoiseEngine::Optix;
+            ImGui::TextDisabled("%s", optix ? (m_settings.optixTemporal ? "OptiX \xC2\xB7 temporal" : "OptiX") : "Open Image Denoise");
+            if (!optix && !OidnInstalled()) {
+                ImGui::SetCursorPosX(labelW);
+                ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.31f, 1), "%s", tr(S::OidnNotInstalled));
+            }
+        }
+        ImGui::SetItemTooltip("%s", tr(S::BatchDenoiseHint));
 
         row(tr(S::InputColor));
         if (ImGui::RadioButton(tr(S::InputAuto), !m_settings.batchCurrentInput)) m_settings.batchCurrentInput = false;

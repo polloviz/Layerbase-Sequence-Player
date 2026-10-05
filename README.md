@@ -40,6 +40,7 @@ What it does and why it's useful: **[FEATURES.md](FEATURES.md)**.
 - **Cryptomatte:** the *Cryptomatte* button (bottom bar) opens the panel: layer (CryptoObject/Material/Asset), *IDs* (colors per object), *Overlay*, *Masked* (only the selection, in scene-linear before the view), *Matte* (black and white mask). Select objects by clicking in the viewer or from the manifest list (searchable). The mask applies to playback and export; in ProRes 4444 it can become the alpha channel. Channel names are matched case-insensitively (Octane writes `.r/.g/.b/.a`). A Cryptomatte-only file opens in IDs mode.
   - **External Cryptomatte sequence:** with a sequence open, *Load Cryptomatte sequence…* (panel or menu) masks it with the Cryptomatte of another sequence (e.g. Octane's `cm-*` pass). Frames are matched by number (by position if the numbering differs); a different resolution is scaled. Works with a beauty in any format. Opening another shot removes the external matte, so it does not apply to batch conversion.
 - **AOV stack:** the *Stack* button (bottom bar) opens the panel. *Add layer* stacks AOVs of the open EXR, or other sequences holding one pass each (multi-select, or drop them on the window while the panel is open; frames are matched by number, a different resolution is stretched). Each layer has its own visibility, EXR layer, input color space, blend mode (*Normal*, *Add*, *Subtract*, *Multiply*, *Screen*), opacity and exposure; drag rows to reorder. Layers are converted to the config's scene-linear working space (`scene_linear` role), blended there on the GPU, and the view transform runs once on the result, for playback and export. Layers read from the same EXR are decoded in one pass; the stack costs nothing until it is used. Cryptomatte is not available while the stack is active; opening another shot closes the stack.
+- **Denoise:** the *Filters* button (bottom bar) removes render noise from the viewed sequence with **Intel Open Image Denoise** (CPU, or GPU through CUDA / HIP / SYCL) or **NVIDIA OptiX** (GPU). Each frame is denoised once and then plays from the cache; captures, exports and batch conversion (*Denoise every sequence*, or `--denoise`) use the denoised frames. Albedo and normal passes of the same EXR (e.g. Cycles *Denoising Albedo* / *Denoising Normal*) are picked automatically as guides, or chosen in the panel. **OptiX temporal** removes the flicker between frames: frames are denoised in order, each with the previous denoised frame moved by the motion vectors of the EXR (e.g. the Cycles *Vector* pass; *Invert* / *Flip Y* adapt other conventions). With parallel decoding a frame waits for the one before it while that is in progress; a jump in the timeline starts a new chain, whose first frame is denoised on its own. In the **AOV stack** each layer has its own *Denoise* switch (guides from its own file). Integer formats are linearized from sRGB for the denoiser and encoded back; alpha is kept. Open Image Denoise is not bundled: the first use asks before downloading the official release (57 MB, from github.com/RenderKit/oidn, SHA-256 verified) into `%LOCALAPPDATA%\SequencePlayer`. OptiX is part of the NVIDIA driver (R535 or later), nothing is downloaded. Nothing is loaded until the first frame is denoised, so startup is unaffected. B of an A/B compare stays as it is, for a before/after.
 - **Batch conversion (Ctrl+B):** add sequences (multi-select), a folder (with subfolders) or drop several files/folders on the window; every sequence found is converted with the same settings (format, quality, size, fps, layer, color). Output next to each sequence or into one folder, skipping existing files, with per-sequence status.
 - **Windows integration:** the installer registers the formats → the player appears in **"Open with"** and in **Default apps**; for extensions without an associated program (often `.exr`, `.dpx`) it becomes the default. Windows does not let programs make themselves the default for extensions that are already associated: *Set as default app…* (Settings) opens the right Windows page.
 - **Portable mode:** `portable.txt` next to the exe keeps settings in a `data` folder beside it, with nothing written to the registry.
@@ -82,6 +83,8 @@ SequencePlayer.exe shot.1001.exr --export shot.mov [--codec h264|h265|prores-pro
 SequencePlayer.exe --batch D:\renders [--out-dir D:\movies] [--codec h264] [--nvenc] [--overwrite]
 Export and batch:  [--aspect 2.39:1|2:1|1.85:1|16:9|4:3|1:1|4:5|9:16 [--bars]] [--burn-in name,frame,timecode,date] [--burn-text "Client review"]
                    converts every sequence in the folder and subfolders, then exits
+                   [--denoise oidn|oidn-cpu|oidn-gpu|optix|optix-temporal]   denoised output (Open Image Denoise must have
+                   been downloaded once from the Filters panel: the command line never downloads it)
 EXR options:       [--layer diffuse] [--crypto-layer CryptoObject] [--matte ids|overlay|masked|matte] [--select ball,floor]
                    [--crypto-seq D:\render\cm\shot_cm_0000.exr]   mask from an external Cryptomatte sequence
 Command-line options never change the saved settings.
@@ -89,7 +92,7 @@ SequencePlayer.exe --register      registers the formats (per user, no admin)
 SequencePlayer.exe --unregister    removes the registration
 ```
 
-Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack|replace|info|scopes|report|reportcheck` opens a dialog at startup (`SP_TEST_SCOPE=0|1|2` picks the scope); `SP_TEST_COMPARE=<file>` compares with another sequence (`SP_TEST_COMPARE_MODE=0..3`: wipe, side by side, difference, toggle); `SP_TEST_CHECK=1|2|3` turns on a pixel check; `SP_TEST_GUIDE=<1..8>` shows an aspect mask with all guides; `SP_TEST_VERSION=1|-1` opens the newer / older version; `SP_TEST_LUT=<file>` loads a LUT; `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer); `SP_UPDATE_URL=<url>` uses another update manifest.
+Debug environment variables: `SP_LOG=1` writes `%TEMP%\SequencePlayer.log` with startup timings; `SP_DUMP=1` (or `=<ms>`) saves a frame of the window to `%TEMP%\SequencePlayer_dump.ppm`; `SP_TEST_OPEN=about|settings|batch|crypto|stack|replace|info|scopes|report|reportcheck` opens a dialog at startup (`SP_TEST_SCOPE=0|1|2` picks the scope); `SP_TEST_COMPARE=<file>` compares with another sequence (`SP_TEST_COMPARE_MODE=0..3`: wipe, side by side, difference, toggle); `SP_TEST_CHECK=1|2|3` turns on a pixel check; `SP_TEST_GUIDE=<1..8>` shows an aspect mask with all guides; `SP_TEST_VERSION=1|-1` opens the newer / older version; `SP_TEST_LUT=<file>` loads a LUT; `SP_TEST_DENOISE=oidn|optix|optix-temporal` turns the denoise on (`SP_TEST_OPEN=filters` opens its panel); `SP_TEST_STACK=diffuse,specular:add,D:\passes\spec.0001.exr,hidebase` builds an AOV stack at startup (layer names of the open file or pass sequences, optional `:normal|add|subtract|multiply|screen`; `hidebase` hides the bottom layer, `denoise` denoises the layer listed before it); `SP_UPDATE_URL=<url>` uses another update manifest.
 
 ## Building
 
@@ -103,6 +106,7 @@ Requirements: Visual Studio 2022/2026 with C++, Git. The installer needs Inno Se
 ```
 
 Dependencies (OpenColorIO, OpenEXR, libtiff, Dear ImGui, GLEW, stb) are built by vcpkg with the `x64-windows-static` triplet.
+The OptiX denoiser needs NVIDIA's OptiX 8.0 SDK headers: they may not be republished, so `tools/get_optix.ps1` (run by `build.ps1`) downloads them into `third_party\optix` (not in git). Without them the build succeeds and OptiX is reported as unavailable. Neither the CUDA Toolkit nor Open Image Denoise is needed to build: both are loaded at run time.
 vcpkg and the project must use the same MSVC toolset: `build.ps1` uses the newest Visual Studio installed.
 
 The display name is *Layerbase Sequence Player*; the exe (`SequencePlayer.exe`), ProgIDs and registry keys keep their original identifiers so that updates replace version 1.1 in place.
@@ -145,6 +149,7 @@ Output in `dist\`:
 | `src/AboutUI.cpp` | About dialog (credits, licenses) |
 | `src/UpdateCheck.cpp`, `src/UpdateUI.cpp` | optional update check (WinHTTP) and banner |
 | `src/FrameCache.cpp` | multi-threaded decoding with a memory-budgeted cache |
+| `src/Denoise.cpp`, `src/DenoiseOptix.cpp`, `src/FilterUI.cpp` | denoise filter: Open Image Denoise (downloaded on first use) and OptiX backends, panel |
 | `src/ImageIO.cpp` | EXR, DPX, TIFF and stb readers |
 | `src/Sequence.cpp` | sequence detection from file names, rescans, versions |
 | `src/Platform.cpp` | Windows registry ("Open with"), dialogs, HTTP, utilities |
@@ -152,6 +157,7 @@ Output in `dist\`:
 | `installer/SequencePlayer.iss` | Inno Setup installer (EN/IT) |
 | `tools/make_icon.py`, `tools/make_notices.py` | icons from `res/*_icon.png`, third-party notices from vcpkg |
 | `tools/make_portable.ps1`, `tools/make_winget.ps1`, `tools/get_ffmpeg.ps1` | portable zip, winget manifests, FFmpeg download |
+| `tools/get_optix.ps1`, `third_party/cuda_shim/` | OptiX SDK headers (build only), the CUDA types they need |
 
 ## License
 

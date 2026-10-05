@@ -135,70 +135,73 @@ void App::openVersion(const SequenceVersion& v)
     const std::shared_ptr<const Sequence> cmpSeq = m_cmpSeq;
     const std::wstring matteFirst = m_matteSeq ? m_matteSeq->frames[0].path : std::wstring();
     // A sequence tied to the shot takes the new version when it has one.
-    auto versioned = [&](const std::wstring& path) {
-        const std::wstring p = ReplaceVersion(path, oldToken, v.token);
+    auto versioned = [oldToken, token = v.token](const std::wstring& path) {
+        const std::wstring p = ReplaceVersion(path, oldToken, token);
         if (p == path) return path;
         const Sequence seq = DetectSequence(p);
         return !seq.empty() && FileExists(seq.frames[0].path) ? p : path;
     };
 
-    openPath(v.path);
-    if (!m_seq || ToLower(m_seq->frames[0].path) != ToLower(v.path)) return;   // could not be opened
-    m_index = m_seq->indexOfNumber(number);
-    if (rangeSet) {
-        m_in = m_seq->indexOfNumber(inNumber);
-        m_out = std::max(m_in, m_seq->indexOfNumber(outNumber));
-    }
-    if (inputChosen && m_color.hasColorSpace(input)) {
-        m_color.input = input;
-        m_inputUserChosen = true;
-        m_colorDirty = true;
-    }
-    m_alphaOverride = alpha;
-    if (!matteFirst.empty()) loadMatteSequence(versioned(matteFirst));
-    if (hasCrypto() && matte != MatteMode::Off && stack.empty()) {
-        m_crypto = std::clamp(crypto, 0, (int)cryptoLayers().size() - 1);
-        m_cryptoSel = cryptoSel;
-        m_matte = matte;
-        applyLoadOptions();
-    }
-    if (!stack.empty()) {
-        if (m_matte != MatteMode::Off) setMatteMode(MatteMode::Off);
-        m_cryptoPanel = false;
-        const auto ownLayers = m_exrInfo.layers.empty() ? nullptr : std::make_shared<const std::vector<ExrLayer>>(m_exrInfo.layers);
-        for (const StackLayer& old : stack) {
-            StackLayer l;
-            if (!old.seq) {
-                l.exrLayers = ownLayers;
-                l.exrLayer = ownLayers ? m_exrInfo.defaultLayer : -1;
-                l.isFloat = IsFloatFormat(m_seqExt);
-                l.input = autoInput(l.isFloat, m_seq->frames[0].path);
-            } else if (!makeSequenceLayer(versioned(old.seq->frames[0].path), l)) {
-                continue;
-            }
-            const ExrLayer* was = old.exrLayers && old.exrLayer >= 0 && old.exrLayer < (int)old.exrLayers->size() ? &(*old.exrLayers)[old.exrLayer] : nullptr;
-            if (was && l.exrLayers)
-                for (size_t i = 0; i < l.exrLayers->size(); ++i)
-                    if ((*l.exrLayers)[i].label == was->label) l.exrLayer = (int)i;
-            l.blend = old.blend;
-            l.opacity = old.opacity;
-            l.exposure = old.exposure;
-            l.visible = old.visible;
-            if (!old.inputAuto && m_color.hasColorSpace(old.input)) {
-                l.input = old.input;
-                l.inputAuto = false;
-            }
-            stackPush(std::move(l));
+    // Applied once the other version is open (later, when its first file is still downloading).
+    openPath(v.path, true, [=, this] {
+        if (!m_seq || ToLower(m_seq->frames[0].path) != ToLower(v.path)) return;   // could not be opened
+        m_index = m_seq->indexOfNumber(number);
+        if (rangeSet) {
+            m_in = m_seq->indexOfNumber(inNumber);
+            m_out = std::max(m_in, m_seq->indexOfNumber(outNumber));
         }
-        m_stackSel = std::clamp(stackSel, 0, std::max(0, (int)m_stack.size() - 1));
-    }
-    if (cmpSeq && stack.empty()) setCompare(cmpSeq->frames[0].path);
-    m_fit = fit;
-    m_zoom = zoom;
-    m_panX = panX;
-    m_panY = panY;
-    if (playDir) setPlaying(playDir);
-    showToast(ToUtf8(v.token) + "  \xC2\xB7  " + ToUtf8(m_seq->displayName()));
+        if (inputChosen && m_color.hasColorSpace(input)) {
+            m_color.input = input;
+            m_inputUserChosen = true;
+            m_colorDirty = true;
+        }
+        m_alphaOverride = alpha;
+        if (!matteFirst.empty()) loadMatteSequence(versioned(matteFirst));
+        if (hasCrypto() && matte != MatteMode::Off && stack.empty()) {
+            m_crypto = std::clamp(crypto, 0, (int)cryptoLayers().size() - 1);
+            m_cryptoSel = cryptoSel;
+            m_matte = matte;
+            applyLoadOptions();
+        }
+        if (!stack.empty()) {
+            if (m_matte != MatteMode::Off) setMatteMode(MatteMode::Off);
+            m_cryptoPanel = false;
+            const auto ownLayers = m_exrInfo.layers.empty() ? nullptr : std::make_shared<const std::vector<ExrLayer>>(m_exrInfo.layers);
+            for (const StackLayer& old : stack) {
+                StackLayer l;
+                if (!old.seq) {
+                    l.exrLayers = ownLayers;
+                    l.exrLayer = ownLayers ? m_exrInfo.defaultLayer : -1;
+                    l.isFloat = IsFloatFormat(m_seqExt);
+                    l.input = autoInput(l.isFloat, m_seq->frames[0].path);
+                } else if (!makeSequenceLayer(versioned(old.seq->frames[0].path), l)) {
+                    continue;
+                }
+                const ExrLayer* was = old.exrLayers && old.exrLayer >= 0 && old.exrLayer < (int)old.exrLayers->size() ? &(*old.exrLayers)[old.exrLayer] : nullptr;
+                if (was && l.exrLayers)
+                    for (size_t i = 0; i < l.exrLayers->size(); ++i)
+                        if ((*l.exrLayers)[i].label == was->label) l.exrLayer = (int)i;
+                l.blend = old.blend;
+                l.opacity = old.opacity;
+                l.exposure = old.exposure;
+                l.visible = old.visible;
+                l.denoise = old.denoise;
+                if (!old.inputAuto && m_color.hasColorSpace(old.input)) {
+                    l.input = old.input;
+                    l.inputAuto = false;
+                }
+                stackPush(std::move(l));
+            }
+            m_stackSel = std::clamp(stackSel, 0, std::max(0, (int)m_stack.size() - 1));
+        }
+        if (cmpSeq && stack.empty()) setCompare(cmpSeq->frames[0].path);
+        m_fit = fit;
+        m_zoom = zoom;
+        m_panX = panX;
+        m_panY = panY;
+        if (playDir) setPlaying(playDir);
+        showToast(ToUtf8(v.token) + "  \xC2\xB7  " + ToUtf8(m_seq->displayName()));
+    });
 }
 
 void App::drawVersionCombo()

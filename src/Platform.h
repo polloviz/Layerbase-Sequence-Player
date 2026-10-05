@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@ std::wstring ToLower(std::wstring s);
 std::wstring GetExePath();
 std::wstring GetAppDataDir();          // %APPDATA%\SequencePlayer, or <exe dir>\data when portable (created on demand)
 bool         IsPortable();             // portable.txt next to the exe
+std::wstring GetLocalDataDir();        // %LOCALAPPDATA%\SequencePlayer (large downloads), or the portable data folder
 std::wstring GetFileExtension(const std::wstring& path);   // lowercase, with dot
 std::wstring GetFileName(const std::wstring& path);
 std::wstring GetParentDir(const std::wstring& path);
@@ -45,6 +47,12 @@ bool SetClipboardImage(HWND owner, const uint8_t* rgb, int width, int height, co
 bool SetClipboardText(HWND owner, const std::string& text);
 // HTTPS GET (WinHTTP, system proxy settings). Returns false on network/HTTP errors.
 bool HttpGet(const std::wstring& url, std::string& body, int timeoutMs);
+// HTTPS download streamed into `file` (redirects followed). `progress(received, total)` is called
+// for each chunk (total 0 = unknown) and cancels the download by returning false.
+bool HttpDownload(const std::wstring& url, const std::wstring& file,
+                  const std::function<bool(uint64_t, uint64_t)>& progress, std::string& err);
+// SHA-256 of a file as uppercase hex ("" if it cannot be read).
+std::string FileSha256(const std::wstring& path);
 
 // Debug log to %TEMP%\SequencePlayer.log, enabled by env SP_LOG=1. Includes ms since start.
 void Log(const char* fmt, ...);

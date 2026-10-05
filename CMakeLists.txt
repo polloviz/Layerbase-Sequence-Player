@@ -42,6 +42,9 @@ add_executable(SequencePlayer WIN32
     src/UI.cpp
     src/ColorAgx.cpp
     src/CryptoUI.cpp
+    src/Denoise.cpp
+    src/Denoise.h
+    src/DenoiseOptix.cpp
     src/ColorManager.cpp
     src/ColorManager.h
     src/Export.cpp
@@ -49,6 +52,7 @@ add_executable(SequencePlayer WIN32
     src/ExportUI.cpp
     src/ExrLayers.cpp
     src/ExrLayers.h
+    src/FilterUI.cpp
     src/FrameCache.cpp
     src/FrameCache.h
     src/FrameUI.cpp
@@ -79,11 +83,23 @@ target_include_directories(SequencePlayer PRIVATE src ${CMAKE_BINARY_DIR}/genera
 target_compile_definitions(SequencePlayer PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 target_compile_options(SequencePlayer PRIVATE /utf-8 /W3 /MP $<$<CONFIG:Release>:/O2 /GL>)
 target_link_options(SequencePlayer PRIVATE $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>)
+# Loaded on first use only, never at startup: download verification and the OptiX driver lookup.
+target_link_options(SequencePlayer PRIVATE /DELAYLOAD:bcrypt.dll /DELAYLOAD:cfgmgr32.dll)
+
+# OptiX denoiser: NVIDIA's SDK headers are fetched by tools/get_optix.ps1 (not redistributable, not
+# in git). OptiX itself is part of the NVIDIA driver. Without the headers the engine is unavailable.
+set(OPTIX_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/optix/include")
+if(EXISTS "${OPTIX_INCLUDE_DIR}/optix_stubs.h")
+    target_include_directories(SequencePlayer PRIVATE ${OPTIX_INCLUDE_DIR} third_party/cuda_shim)
+    target_compile_definitions(SequencePlayer PRIVATE SP_HAVE_OPTIX)
+else()
+    message(WARNING "OptiX headers not found (run tools/get_optix.ps1): building without the OptiX denoiser")
+endif()
 target_link_libraries(SequencePlayer PRIVATE
     OpenEXR::OpenEXR
     OpenColorIO::OpenColorIO
     imgui::imgui
     TIFF::TIFF
     GLEW::GLEW
-    opengl32 dwmapi shlwapi shell32 ole32 uuid comctl32
+    opengl32 dwmapi shlwapi shell32 ole32 uuid comctl32 delayimp
 )

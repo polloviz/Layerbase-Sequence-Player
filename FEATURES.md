@@ -126,6 +126,24 @@ Checks are shown only in the viewer, never in captures or exports.
 **Why it helps:** you can rebuild the beauty from its passes, tweak each light or pass with its own exposure, and export
 the result, without opening compositing software.
 
+### Denoise
+
+- The **Filters** button opens a panel with a **Denoise** filter for noisy renders: **Intel Open Image Denoise**
+  (on the CPU, or on NVIDIA, AMD and Intel GPUs) or **NVIDIA OptiX** (NVIDIA GPUs).
+- Each frame is denoised once and then plays from the cache: on a recent GPU a full HD frame takes a few milliseconds.
+  Frame captures and movie exports use the denoised frames.
+- When the EXR also holds the renderer's albedo and normal passes (Cycles *Denoising Albedo* / *Denoising Normal*
+  and similar), they are used automatically as guides, which keeps textures and edges sharp.
+- Open Image Denoise is downloaded only the first time it is used, after asking (57 MB, official release, verified);
+  OptiX comes with the NVIDIA driver. Nothing is loaded until you turn the filter on: opening a sequence stays just as fast.
+- **OptiX temporal** mode removes the flicker between frames: each frame is denoised together with the previous
+  denoised one, which follows moving objects through the renderer's motion vectors (e.g. the Cycles *Vector* pass).
+- In the AOV stack each layer can be denoised on its own, and **batch conversion** can denoise every sequence
+  (also from the command line with `--denoise`).
+- With A/B compare, B is left as it is: open the same shot as B for a before/after.
+
+**Why it helps:** you can judge a quick low-sample render, or send a clean preview, without a compositing pass.
+
 ## 6. Cryptomatte
 
 - Works with Cryptomatte from **Octane**, Arnold, Redshift, V-Ray, Blender and other renderers that follow the standard.
