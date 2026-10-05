@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
-  "notes_en": "Follows a render in progress, versions with Alt+Up / Alt+Down, A/B compare (wipe, side by side, difference), QC checks (NaN, false color, zebra), scopes, guides, metadata panel, frame report, and export crop / black bars with burn-in.",
-  "notes_it": "Segue un render in corso, versioni con Alt+Su / Alt+Giù, confronto A/B (tendina, affiancate, differenza), controlli QC (NaN, falsi colori, zebra), scope, guide, pannello metadati, report dei frame ed export con ritaglio / bande nere e sovrimpressione."
+  "notes_en": "Denoise for renders with Intel Open Image Denoise (CPU or GPU) or NVIDIA OptiX, including OptiX temporal (no flicker) with motion vectors, albedo/normal guides, per-layer denoise in the AOV stack and in batch conversion. Opening files on cloud or network drives no longer freezes the window.",
+  "notes_it": "Riduzione rumore dei render con Intel Open Image Denoise (CPU o GPU) o NVIDIA OptiX, anche OptiX temporale (niente sfarfallio) con i motion vector, guide albedo/normali, denoise per layer nello stack AOV e nella conversione batch. Aprire file su dischi cloud o di rete non blocca più la finestra."
 }
