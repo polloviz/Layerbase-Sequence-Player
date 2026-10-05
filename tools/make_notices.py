@@ -61,13 +61,35 @@ FFMPEG_LICENSE.txt and FFMPEG_README.txt (version, source code and build
 scripts) in the program folder. https://ffmpeg.org/legal.html
 
 ================================================================================
+Intel Open Image Denoise
+================================================================================
+Intel Open Image Denoise is not part of Layerbase Sequence Player and is not
+distributed with it. The first time its denoiser is used, the program asks
+before downloading the official release (version 2.5.1) from
+https://github.com/RenderKit/oidn into the user's local application data
+folder, together with its LICENSE.txt and third-party notices. It is loaded
+only while the denoiser is in use.
+Copyright 2018 Intel Corporation - Apache License 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+NVIDIA OptiX
+================================================================================
+The OptiX denoiser support is built with the NVIDIA OptiX SDK 8.0 headers
+(https://github.com/NVIDIA/optix-dev), Copyright (c) 2023 NVIDIA Corporation,
+used under the NVIDIA SDK license; they are not part of this program's source
+code. OptiX itself is provided by the NVIDIA display driver installed on the
+user's computer and is subject to the NVIDIA driver license.
+
+================================================================================
 Trademarks
 ================================================================================
-ACES is a trademark of the Academy of Motion Picture Arts and Sciences.
-Apple and ProRes are trademarks of Apple Inc. OpenEXR and OpenColorIO are
-projects of the Academy Software Foundation. FFmpeg is a trademark of Fabrice
-Bellard. All other trademarks belong to their respective owners; their use does
-not imply endorsement.
+ACES is a trademark of the Academy of Motion Picture Arts and Sciences. Apple
+and ProRes are trademarks of Apple Inc. OpenEXR and OpenColorIO are projects of
+the Academy Software Foundation. FFmpeg is a trademark of Fabrice Bellard. Intel
+is a trademark of Intel Corporation. NVIDIA and OptiX are trademarks of NVIDIA
+Corporation. All other trademarks belong to their respective owners; their use
+does not imply endorsement.
 """
 
 
