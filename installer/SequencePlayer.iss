@@ -2,7 +2,7 @@
 ; Build: ISCC.exe installer\SequencePlayer.iss   (or run build.ps1)
 
 #define AppName "Layerbase Sequence Player"
-#define AppVersion "1.6.0"
+#define AppVersion "1.7.0"
 #define AppExe "SequencePlayer.exe"
 #define AppPublisher "Layerbase Luxury Vision"
 #define AppURL "https://layerbase.it"
