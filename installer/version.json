@@ -1,6 +1,6 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "url": "https://github.com/polloviz/Layerbase-Sequence-Player/releases/latest",
-  "notes_en": "Denoise for renders with Intel Open Image Denoise (CPU or GPU) or NVIDIA OptiX, including OptiX temporal (no flicker) with motion vectors, albedo/normal guides, per-layer denoise in the AOV stack and in batch conversion. Opening files on cloud or network drives no longer freezes the window.",
-  "notes_it": "Riduzione rumore dei render con Intel Open Image Denoise (CPU o GPU) o NVIDIA OptiX, anche OptiX temporale (niente sfarfallio) con i motion vector, guide albedo/normali, denoise per layer nello stack AOV e nella conversione batch. Aprire file su dischi cloud o di rete non blocca più la finestra."
+  "notes_en": "OptiX temporal denoise without trails: motion estimated from the frames by NVIDIA Optical Flow when there are no motion vectors, and a Reduce trails option. The motion vector AOV can also come from a sequence of its own. New Strength slider for the denoise.",
+  "notes_it": "Denoise OptiX temporale senza scie: movimento stimato dai frame con NVIDIA Optical Flow quando mancano i motion vector, e opzione Riduci le scie. L'AOV motion vector può arrivare anche da una sequenza a parte. Nuovo cursore Intensità per il denoise."
 }
