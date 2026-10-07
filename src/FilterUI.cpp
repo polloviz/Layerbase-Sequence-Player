@@ -39,9 +39,10 @@ const ImVec4 kWarn(1.0f, 0.78f, 0.31f, 1.0f);
 const ImVec4 kErr(1.0f, 0.36f, 0.36f, 1.0f);
 
 // A layer that can serve as this guide: 3 channels (RGB / XYZ), 2 are enough for motion vectors.
-bool GuideCandidate(const ExrLayer& l, GuideKind kind)
+// The color of a motion vector AOV sequence holds the vectors; elsewhere it is the image itself.
+bool GuideCandidate(const ExrLayer& l, GuideKind kind, bool ownSequence)
 {
-    return !l.isRootColor && l.channels.size() >= (kind == GuideKind::Flow ? 2u : 3u);
+    return (!l.isRootColor || ownSequence) && l.channels.size() >= (kind == GuideKind::Flow ? 2u : 3u);
 }
 
 }  // namespace
@@ -49,11 +50,18 @@ bool GuideCandidate(const ExrLayer& l, GuideKind kind)
 // ---------------------------------------------------------------------------
 // State
 
-int App::denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& layers) const
+const std::vector<ExrLayer>& App::guideLayers(GuideKind kind, const std::vector<ExrLayer>& layers) const
 {
-    if (kind == GuideKind::Normal && denoiseGuide(GuideKind::Albedo, layers) < 0) return -1;   // a normal guide needs albedo
+    return kind == GuideKind::Flow && m_mvSeq ? m_mvLayers : layers;
+}
+
+int App::denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& fileLayers) const
+{
+    if (kind == GuideKind::Normal && denoiseGuide(GuideKind::Albedo, fileLayers) < 0) return -1;   // a normal guide needs albedo
     const std::string& choice = kind == GuideKind::Albedo ? m_guideAlbedo : kind == GuideKind::Normal ? m_guideNormal : m_guideFlow;
-    if (choice == "-" || layers.size() < 2) return -1;
+    const bool ownSequence = kind == GuideKind::Flow && m_mvSeq;
+    const std::vector<ExrLayer>& layers = guideLayers(kind, fileLayers);
+    if (choice == "-" || choice == "~" || layers.size() < (ownSequence ? 1u : 2u)) return -1;
     if (!choice.empty()) {   // a layer picked by name; a file without it has no guide
         for (size_t i = 0; i < layers.size(); ++i)
             if (layers[i].label == choice) return (int)i;
@@ -62,7 +70,8 @@ int App::denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& layers) const
     // Automatic: the renderer's denoising passes first (Cycles "Denoising Albedo"), then any match.
     int best = -1, bestScore = 0;
     for (size_t i = 0; i < layers.size(); ++i) {
-        if (!GuideCandidate(layers[i], kind)) continue;
+        if (!GuideCandidate(layers[i], kind, ownSequence)) continue;
+        if (ownSequence && best < 0) best = (int)i;   // a sequence of motion vectors: its first layer will do
         const std::string l = Lower(layers[i].label);
         int score = 0;
         if (kind == GuideKind::Albedo && l.find("albedo") != std::string::npos) score = 1;
@@ -85,9 +94,12 @@ DenoiseSpecPtr App::makeDenoiseSpec(const std::vector<ExrLayer>& layers) const
     d->temporal = d->engine == DenoiseEngine::Optix && m_settings.optixTemporal;
     d->key = d->engine == DenoiseEngine::Optix ? (d->temporal ? "dn:optixT" : "dn:optix")
                                                : "dn:oidn" + std::to_string(m_settings.oidnDevice) + std::to_string(m_settings.oidnQuality);
-    auto guide = [&](int index, const char* tag) -> LoadOptionsPtr {
+    if (m_settings.denoiseStrength < 100) d->key += "|s" + std::to_string(m_settings.denoiseStrength);
+    d->strength = m_settings.denoiseStrength / 100.0f;
+    auto guide = [&](GuideKind kind, const char* tag) -> LoadOptionsPtr {
+        const int index = denoiseGuide(kind, layers);
         if (index < 0) return nullptr;
-        const ExrLayer& l = layers[index];
+        const ExrLayer& l = guideLayers(kind, layers)[index];
         auto o = std::make_shared<LoadOptions>();
         o->part = l.part;
         o->channels = l.channels;
@@ -95,14 +107,25 @@ DenoiseSpecPtr App::makeDenoiseSpec(const std::vector<ExrLayer>& layers) const
         for (const auto& c : l.channels) d->key += "," + c;
         return o;
     };
-    d->albedo = guide(denoiseGuide(GuideKind::Albedo, layers), "a");
+    d->albedo = guide(GuideKind::Albedo, "a");
     // Temporal OptiX wants camera-space normals, which renderers rarely write: no normal guide there.
-    if (!d->temporal) d->normal = guide(denoiseGuide(GuideKind::Normal, layers), "n");
+    if (!d->temporal) d->normal = guide(GuideKind::Normal, "n");
     if (d->temporal) {
-        d->flow = guide(denoiseGuide(GuideKind::Flow, layers), "f");
-        d->flowInvert = m_settings.flowInvert;
-        d->flowFlipY = m_settings.flowFlipY;
-        if (d->flow) d->key += std::string("|") + (d->flowInvert ? "i" : "") + (d->flowFlipY ? "y" : "");
+        d->antiGhost = m_settings.denoiseAntiGhost;
+        if (!d->antiGhost) d->key += "|trails";
+        d->flow = guide(GuideKind::Flow, "f");
+        if (d->flow) {
+            d->flowInvert = m_settings.flowInvert;
+            d->flowFlipY = m_settings.flowFlipY;
+            d->key += std::string("|") + (d->flowInvert ? "i" : "") + (d->flowFlipY ? "y" : "");
+            if (m_mvSeq) {
+                d->flowFiles = m_mvFiles;
+                d->key += "|" + ToUtf8(ToLower(m_mvSeq->directory + L"\\" + m_mvSeq->displayName()));
+            }
+        } else if (m_guideFlow != "-") {   // automatic without an AOV, or chosen
+            d->estimateFlow = true;
+            d->key += "|est";
+        }
     }
     return d;
 }
@@ -181,20 +204,28 @@ ImagePtr App::stackImage(const FrameSetPtr& set, const StackLayer& s) const
 void App::drawGuideCombo(const char* id, GuideKind kind, float width)
 {
     std::string& choice = kind == GuideKind::Albedo ? m_guideAlbedo : kind == GuideKind::Normal ? m_guideNormal : m_guideFlow;
-    const auto& layers = m_exrInfo.layers;
-    const int current = denoiseGuide(kind, layers);
+    const bool motion = kind == GuideKind::Flow, ownSequence = motion && m_mvSeq;
+    const auto& layers = guideLayers(kind, m_exrInfo.layers);
+    const int current = denoiseGuide(kind, m_exrInfo.layers);
     std::string preview;
     if (choice == "-") preview = tr(S::GuideOff);
-    else if (choice.empty()) preview = std::string(tr(S::GuideAuto)) + (current >= 0 ? " \xC2\xB7 " + layers[current].label : "");
-    else preview = current >= 0 ? layers[current].label : choice + " (?)";
+    else if (choice == "~") preview = tr(S::MotionEstimate);
+    else if (choice.empty()) {
+        preview = tr(S::GuideAuto);
+        if (current >= 0) preview += " \xC2\xB7 " + layers[current].label;
+        else if (motion) preview += std::string(" \xC2\xB7 ") + tr(S::MotionEstimate);   // no AOV: estimated
+    } else {
+        preview = current >= 0 ? layers[current].label : choice + " (?)";
+    }
     ImGui::SetNextItemWidth(width);
     if (ImGui::BeginCombo(id, preview.c_str(), ImGuiComboFlags_HeightLarge)) {
         std::string pick = choice;
         if (ImGui::Selectable(tr(S::GuideAuto), choice.empty())) pick.clear();
+        if (motion && ImGui::Selectable(tr(S::MotionEstimate), choice == "~")) pick = "~";
         if (ImGui::Selectable(tr(S::GuideOff), choice == "-")) pick = "-";
         ImGui::Separator();
         for (const ExrLayer& l : layers) {
-            if (!GuideCandidate(l, kind)) continue;
+            if (!GuideCandidate(l, kind, ownSequence)) continue;
             if (ImGui::Selectable(l.label.c_str(), !choice.empty() && choice == l.label)) pick = l.label;
         }
         ImGui::EndCombo();
@@ -203,6 +234,54 @@ void App::drawGuideCombo(const char* id, GuideKind kind, float width)
             denoiseSettingsChanged();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Motion vector AOV from a sequence of its own
+
+void App::loadMotionDialog()
+{
+    const std::wstring path = ShowOpenFilteredDialog(m_hwnd, FromUtf8(tr(S::LoadMotionAov)).c_str(), L"OpenEXR", L"*.exr");
+    if (!path.empty()) loadMotionSequence(path);
+}
+
+bool App::loadMotionSequence(const std::wstring& path)
+{
+    if (!m_seq) return false;
+    int start = 0;
+    Sequence seq = DetectSequence(path, &start);
+    ExrInfo info;
+    if (!seq.empty() && GetFileExtension(seq.frames[0].path) == L".exr") info = ReadExrInfo(seq.frames[start].path);
+    if (std::none_of(info.layers.begin(), info.layers.end(), [](const ExrLayer& l) { return GuideCandidate(l, GuideKind::Flow, true); })) {
+        showToast(std::string(tr(S::NotMotionAov)) + " " + ToUtf8(GetFileName(path)), true);
+        return false;
+    }
+    m_mvSeq = std::make_shared<const Sequence>(std::move(seq));
+    m_mvLayers = std::move(info.layers);
+    m_guideFlow.clear();   // automatic: its vector layer, else its color
+    rematchMotionSequence();
+    denoiseSettingsChanged();
+    showToast(std::string(tr(S::MotionAovLoaded)) + ": " + ToUtf8(m_mvSeq->displayName()), m_mvMissing > 0);
+    return true;
+}
+
+void App::clearMotionSequence()
+{
+    if (!m_mvSeq) return;
+    m_mvSeq.reset();
+    m_mvFiles.reset();
+    m_mvLayers.clear();
+    m_mvMissing = 0;
+    m_guideFlow.clear();
+    denoiseSettingsChanged();
+}
+
+void App::rematchMotionSequence()
+{
+    if (!m_mvSeq || !m_seq) return;
+    auto files = std::make_shared<const std::vector<std::wstring>>(MatchFrames(*m_seq, *m_mvSeq));
+    m_mvMissing = (int)std::count(files->begin(), files->end(), std::wstring());
+    m_mvFiles = files;
 }
 
 void App::drawFilterPanel(float x, float y, float w, float h)
@@ -290,6 +369,13 @@ void App::drawFilterPanel(float x, float y, float w, float h)
         if (ImGui::Checkbox(tr(S::OptixTemporal), &m_settings.optixTemporal)) denoiseSettingsChanged();
         Hint(tr(S::OptixTemporalHint));
     }
+    ImGui::Spacing();
+    Label(tr(S::DenoiseStrength));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::SliderInt("##dnstrength", &m_settings.denoiseStrength, 0, 100, "%d%%", ImGuiSliderFlags_AlwaysClamp);
+    if (ImGui::IsItemDeactivatedAfterEdit()) denoiseSettingsChanged();   // every frame is denoised again: on release only
+    ImGui::SetItemTooltip("%s", tr(S::DenoiseStrengthHint));
 
     // Guides
     const bool temporal = engine == DenoiseEngine::Optix && m_settings.optixTemporal;
@@ -298,8 +384,7 @@ void App::drawFilterPanel(float x, float y, float w, float h)
     ImGui::Spacing();
     ImGui::TextUnformatted(tr(S::DenoiseGuides));
     if (hasLayers()) {
-        const float labelW = std::max({ ImGui::CalcTextSize(tr(S::GuideAlbedo)).x, ImGui::CalcTextSize(tr(S::GuideNormal)).x,
-                                        ImGui::CalcTextSize(tr(S::GuideMotion)).x }) + 10 * s;
+        const float labelW = std::max(ImGui::CalcTextSize(tr(S::GuideAlbedo)).x, ImGui::CalcTextSize(tr(S::GuideNormal)).x) + 10 * s;
         auto guideRow = [&](const char* label, const char* id, GuideKind kind, bool enabled) {
             Label(label);
             ImGui::SameLine(labelW + ImGui::GetStyle().WindowPadding.x);
@@ -309,20 +394,36 @@ void App::drawFilterPanel(float x, float y, float w, float h)
         };
         guideRow(tr(S::GuideAlbedo), "##galbedo", GuideKind::Albedo, true);
         if (!temporal) guideRow(tr(S::GuideNormal), "##gnormal", GuideKind::Normal, denoiseGuide(GuideKind::Albedo, m_exrInfo.layers) >= 0);
-        if (temporal) {
-            guideRow(tr(S::GuideMotion), "##gflow", GuideKind::Flow, true);
-            if (denoiseGuide(GuideKind::Flow, m_exrInfo.layers) >= 0) {
-                ImGui::SetCursorPosX(labelW + ImGui::GetStyle().WindowPadding.x);
-                if (ImGui::Checkbox(tr(S::FlowInvert), &m_settings.flowInvert)) denoiseSettingsChanged();
-                ImGui::SameLine();
-                if (ImGui::Checkbox(tr(S::FlowFlipY), &m_settings.flowFlipY)) denoiseSettingsChanged();
-            }
-            Hint(tr(S::GuidesTemporalHint));
-        } else {
-            Hint(tr(S::GuidesHint));
-        }
+        Hint(tr(temporal ? S::GuidesTemporalHint : S::GuidesHint));
     } else {
         Hint(tr(S::GuidesNoLayers));
+    }
+
+    // Motion (temporal): the motion vector AOV of the file or of a sequence of its own, else estimated.
+    if (temporal) {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::TextUnformatted(tr(S::MotionAov));
+        drawGuideCombo("##gflow", GuideKind::Flow, ImGui::GetContentRegionAvail().x);
+        if (m_mvSeq) {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(ToUtf8(m_mvSeq->displayName()).c_str());
+            ImGui::SetItemTooltip("%s", ToUtf8(m_mvSeq->directory).c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(S::RemoveMotionAov))) clearMotionSequence();
+            if (m_mvMissing > 0) ImGui::TextColored(kWarn, "%d %s", m_mvMissing, tr(S::MotionAovMissing));
+        }
+        if (ImGui::Button(tr(S::LoadMotionAov), ImVec2(-FLT_MIN, 0))) defer([this] { loadMotionDialog(); });
+        if (denoiseGuide(GuideKind::Flow, m_exrInfo.layers) >= 0) {
+            if (ImGui::Checkbox(tr(S::FlowInvert), &m_settings.flowInvert)) denoiseSettingsChanged();
+            ImGui::SameLine();
+            if (ImGui::Checkbox(tr(S::FlowFlipY), &m_settings.flowFlipY)) denoiseSettingsChanged();
+        }
+        Hint(tr(S::MotionAovHint));
+        ImGui::Spacing();
+        if (ImGui::Checkbox(tr(S::AntiGhost), &m_settings.denoiseAntiGhost)) denoiseSettingsChanged();
+        Hint(tr(S::AntiGhostHint));
     }
 
     // Status
@@ -337,6 +438,18 @@ void App::drawFilterPanel(float x, float y, float w, float h)
             ImGui::TextUnformatted(st.device.c_str());
         }
         if (st.frames > 0) ImGui::TextDisabled("%.0f %s", st.lastMs, tr(S::MsPerFrame));
+        if (temporal && st.frames > 0) {
+            Label(tr(S::GuideMotion));
+            ImGui::SameLine();
+            ImGui::TextUnformatted(st.motion == DenoiseMotion::Aov         ? tr(S::MotionByAov)
+                                   : st.motion == DenoiseMotion::Estimated ? tr(S::MotionByEstimate)
+                                                                           : tr(S::MotionByNone));
+            if (st.motion == DenoiseMotion::None && !st.flowNote.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, kWarn);
+                ImGui::TextWrapped("%s", st.flowNote.c_str());
+                ImGui::PopStyleColor();
+            }
+        }
         if (st.busy) ImGui::TextColored(kWarn, "%s", tr(S::DenoiseBusy));
         if (!st.error.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, kErr);

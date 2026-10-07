@@ -143,12 +143,22 @@ int App::run(const std::wstring& initialPath, double fpsOverride, bool autoplay,
         }
     }
     // Debug: SP_TEST_OPEN=about|batch|settings|crypto|stack|filters|replace opens a dialog/panel at startup (with SP_DUMP for
-    // screenshots); SP_TEST_LUT=<file> loads a LUT; SP_TEST_DENOISE=oidn|optix|optix-temporal turns the denoise on.
+    // screenshots); SP_TEST_LUT=<file> loads a LUT; SP_TEST_DENOISE=oidn|optix|optix-temporal turns the denoise on;
+    // SP_TEST_MOTION=<file>|estimate|none loads a motion vector AOV sequence / picks the temporal motion.
     if (const wchar_t* l = _wgetenv(L"SP_TEST_LUT")) setLut(ToUtf8(l));
     if (const wchar_t* d = _wgetenv(L"SP_TEST_DENOISE")) {
         m_settings.denoiseEngine = std::wstring(d).rfind(L"optix", 0) == 0 ? 1 : 0;
         m_settings.optixTemporal = std::wstring(d) == L"optix-temporal";
         setDenoise(true);
+    }
+    if (const wchar_t* mv = _wgetenv(L"SP_TEST_MOTION")) {
+        const std::wstring m = mv;
+        if (m == L"none" || m == L"estimate") {
+            m_guideFlow = m == L"none" ? "-" : "~";
+            denoiseSettingsChanged();
+        } else {
+            loadMotionSequence(m);
+        }
     }
     if (const wchar_t* t = _wgetenv(L"SP_TEST_OPEN")) {
         const std::wstring w = t;
@@ -623,7 +633,11 @@ void App::pollOpen()
     m_matteInfo = ExrInfo();
     m_matteFiles.reset();
     m_matteMissing = 0;
-    resetCompare();       // so does the compared sequence
+    m_mvSeq.reset();      // so does a motion vector AOV sequence
+    m_mvFiles.reset();
+    m_mvLayers.clear();
+    m_mvMissing = 0;
+    resetCompare();       // and the compared sequence
     m_badImage.reset();
     m_frameCheck.reset();
     if (!hasCrypto()) { m_matte = MatteMode::Off; m_cryptoPanel = false; }
@@ -673,6 +687,7 @@ std::vector<const char*> App::workToLose() const
     if (m_in > 0 || m_out < frameCount() - 1) w.push_back(tr(S::ReplaceInOut));
     if (!m_cryptoSel.empty()) w.push_back(tr(S::ReplaceCrypto));
     if (m_matteSeq) w.push_back(tr(S::ReplaceMatte));
+    if (m_mvSeq) w.push_back(tr(S::ReplaceMotionAov));
     if (m_alphaOverride >= 0) w.push_back(tr(S::ReplaceAlpha));
     if (compareActive()) w.push_back(tr(S::ReplaceCompare));
     return w;

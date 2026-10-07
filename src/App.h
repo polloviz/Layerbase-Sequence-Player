@@ -64,7 +64,8 @@ struct StackLayer {
     std::string loadKey;                                     // key of the decoded (filtered) pixels; "" = key
 };
 
-// Denoiser guide passes, picked among the EXR layers of the denoised file.
+// Denoiser guide passes, picked among the EXR layers of the denoised file. Flow = the motion
+// vector AOV, which can also come from a sequence of its own.
 enum class GuideKind { Albedo, Normal, Flow };
 
 class App {
@@ -206,7 +207,14 @@ private:
     bool requireDenoiser(std::function<void()> then);
     void denoiseSettingsChanged();
     void denoiseUnused();                          // frees the devices when nothing is denoised any more
-    int denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& layers) const;   // layer index; -1 = none
+    // Layer index in guideLayers(kind, layers); -1 = none.
+    int denoiseGuide(GuideKind kind, const std::vector<ExrLayer>& layers) const;
+    // Where a guide is picked from: `layers` (the denoised file), or the motion vector AOV sequence.
+    const std::vector<ExrLayer>& guideLayers(GuideKind kind, const std::vector<ExrLayer>& layers) const;
+    void loadMotionDialog();
+    bool loadMotionSequence(const std::wstring& path);
+    void clearMotionSequence();
+    void rematchMotionSequence();                  // after the opened sequence changed on disk
     void drawFilterPanel(float x, float y, float w, float h);
     void drawGuideCombo(const char* id, GuideKind kind, float width);
     void drawDenoiseDownload();                    // modal: what is downloaded, where, progress
@@ -400,7 +408,14 @@ private:
     // Filters. The denoise is not saved: every session starts without it (nothing loaded at startup).
     bool m_filterPanel = false;
     bool m_denoise = false;
-    std::string m_guideAlbedo, m_guideNormal, m_guideFlow;   // EXR layer labels; "" = automatic, "-" = none
+    // EXR layer labels; "" = automatic, "-" = none. Motion: "~" = estimated from the frames.
+    std::string m_guideAlbedo, m_guideNormal, m_guideFlow;
+    // Motion vector AOV from a sequence of its own, matched by frame number; null = the AOV is a
+    // layer of the denoised file. It belongs to the opened shot.
+    std::shared_ptr<const Sequence> m_mvSeq;
+    std::shared_ptr<const std::vector<std::wstring>> m_mvFiles;   // per frame of the opened sequence
+    std::vector<ExrLayer> m_mvLayers;
+    int m_mvMissing = 0;
     bool m_openDenoiseDownload = false;
     std::shared_ptr<OidnInstall> m_oidnInstall; // download running or finished (until the dialog closes)
     std::function<void()> m_afterOidnInstall;   // what asked for the download (filter on, batch start)

@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 // Denoising of rendered frames with Intel Open Image Denoise (CPU or GPU; its libraries are
 // downloaded on first use) or NVIDIA OptiX (part of the NVIDIA driver). Nothing is loaded
@@ -24,11 +25,20 @@ struct DenoiseSpec {
     // Guide layers read from the same EXR file (null = none). A normal guide needs an albedo guide.
     LoadOptionsPtr albedo, normal;
     // OptiX temporal mode: each frame also uses the denoised previous frame, moved by the motion
-    // vectors (`flow`, null = still image assumed), which removes the flicker between frames.
+    // vector AOV (`flow`) or by motion estimated from the frames, which removes the flicker
+    // between frames. Without either the image is assumed still.
     bool temporal = false;
     LoadOptionsPtr flow;
+    // Motion vector AOV from another sequence: its file per frame of the sequence ("" = none for
+    // that frame). Null = the AOV is a layer of the denoised file itself.
+    std::shared_ptr<const std::vector<std::wstring>> flowFiles;
     bool flowInvert = false;   // the vectors point from the current frame to the previous one
     bool flowFlipY = false;    // the renderer's Y axis points up
+    bool estimateFlow = false; // no AOV: motion estimated by the NVIDIA Optical Flow hardware
+    // Where the previous frame does not match this one (disocclusions, wrong or missing motion),
+    // the result is kept within the colors of this frame denoised on its own: no trails.
+    bool antiGhost = true;
+    float strength = 1.0f;     // 0 = the original frame, 1 = fully denoised
     std::string key;   // identity of these settings, appended to LayerLoad::key
 };
 using DenoiseSpecPtr = std::shared_ptr<const DenoiseSpec>;
@@ -52,10 +62,15 @@ ImagePtr DenoiseImage(const DenoiseInput& in, const DenoiseSpec& spec);
 void DenoiseFrameStarted(const std::string& stream, int frame);
 void DenoiseFrameFinished(const std::string& stream, int frame);
 
+// Motion the temporal mode followed on a frame.
+enum class DenoiseMotion : uint8_t { None = 0, Aov = 1, Estimated = 2 };
+
 // What the filter panel shows.
 struct DenoiseStatus {
     std::string device;   // "NVIDIA GeForce RTX 4090 (CUDA)"
     std::string error;    // last failure, cleared by the next success
+    DenoiseMotion motion = DenoiseMotion::None;   // temporal: last chained frame
+    std::string flowNote;  // why motion could not be estimated ("" = it could)
     double lastMs = 0;    // time of the last frame
     int frames = 0;       // frames denoised so far
     bool busy = false;    // a frame is being denoised now
@@ -97,9 +112,14 @@ struct OptixFrame {
     const float* flow = nullptr;
     int width = 0, height = 0;
     bool temporal = false;
+    bool estimateFlow = false, antiGhost = false;
     const std::string* stream = nullptr;
     int frame = -1;
     float* out = nullptr;
+    // Results (temporal): the motion used, and why it could not be estimated.
+    DenoiseMotion motion = DenoiseMotion::None;
+    bool chained = false;
+    std::string flowNote;
 };
-bool OptixDenoise(const OptixFrame& f, std::string& device, std::string& err);
+bool OptixDenoise(OptixFrame& f, std::string& device, std::string& err);
 void OptixRelease();

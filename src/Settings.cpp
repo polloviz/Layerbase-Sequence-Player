@@ -53,6 +53,8 @@ void Settings::load()
         else if (k == "optixTemporal") optixTemporal = toInt(0) != 0;
         else if (k == "flowInvert") flowInvert = toInt(0) != 0;
         else if (k == "flowFlipY") flowFlipY = toInt(0) != 0;
+        else if (k == "denoiseAntiGhost") denoiseAntiGhost = toInt(1) != 0;
+        else if (k == "denoiseStrength") denoiseStrength = std::clamp(toInt(100), 0, 100);
         else if (k == "batchDenoise") batchDenoise = toInt(0) != 0;
         else if (k == "exportAspect") exportAspect = std::clamp(toInt(0), 0, 8);
         else if (k == "exportAspectBars") exportAspectBars = toInt(0) != 0;
@@ -110,6 +112,7 @@ void Settings::save() const
       << "\nguideCenter=" << (guideCenter ? 1 : 0) << "\nguideThirds=" << (guideThirds ? 1 : 0) << "\n"
       << "denoiseEngine=" << denoiseEngine << "\noidnDevice=" << oidnDevice << "\noidnQuality=" << oidnQuality << "\n"
       << "optixTemporal=" << (optixTemporal ? 1 : 0) << "\nflowInvert=" << (flowInvert ? 1 : 0) << "\nflowFlipY=" << (flowFlipY ? 1 : 0)
+      << "\ndenoiseAntiGhost=" << (denoiseAntiGhost ? 1 : 0) << "\ndenoiseStrength=" << denoiseStrength
       << "\nbatchDenoise=" << (batchDenoise ? 1 : 0) << "\n"
       << "exportAspect=" << exportAspect << "\nexportAspectBars=" << (exportAspectBars ? 1 : 0) << "\n"
       << "burnIn=" << (burnIn ? 1 : 0) << "\nburnName=" << (burnName ? 1 : 0) << "\nburnFrame=" << (burnFrame ? 1 : 0)

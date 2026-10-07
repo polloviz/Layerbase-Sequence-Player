@@ -64,12 +64,13 @@ void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vec
         else it->second.push_back(k);
     }
     static const LoadOptions kDefault;
-    // Denoiser guides of each layer (albedo, normal, motion vectors): EXR layers of the same file.
+    // Denoiser guides of each layer (albedo, normal, motion vectors): EXR layers of the same file;
+    // the motion vector AOV can also come from a sequence of its own.
     constexpr int kGuides = 3;
     std::vector<std::array<ImagePtr, kGuides>> guides(plan.layers.size());
     auto guideOpts = [&](size_t k, int g) -> const LoadOptions* {
         const DenoiseSpecPtr& d = plan.layers[k].denoise;
-        return !d ? nullptr : g == 0 ? d->albedo.get() : g == 1 ? d->normal.get() : d->temporal ? d->flow.get() : nullptr;
+        return !d ? nullptr : g == 0 ? d->albedo.get() : g == 1 ? d->normal.get() : d->temporal && !d->flowFiles ? d->flow.get() : nullptr;
     };
     // Temporal denoise chains frames per stream; the frames being decoded are announced first,
     // so the next frame waits for this one instead of starting a new chain.
@@ -125,6 +126,17 @@ void DecodeLayers(const Sequence& seq, int index, const LoadPlan& plan, std::vec
             }
         }
     }
+    std::vector<std::pair<std::wstring, ImagePtr>> flowFiles;   // read once for the layers sharing it
+    for (const auto& [path, layers] : byFile)
+        for (size_t k : layers) {
+            const DenoiseSpecPtr& d = plan.layers[k].denoise;
+            if (!d || !d->temporal || !d->flow || !d->flowFiles || index >= (int)d->flowFiles->size()) continue;
+            const std::wstring& file = (*d->flowFiles)[index];
+            if (file.empty()) continue;   // no motion vectors for this frame: assumed still
+            auto it = std::find_if(flowFiles.begin(), flowFiles.end(), [&](auto& f) { return f.first == file; });
+            if (it == flowFiles.end()) it = flowFiles.insert(flowFiles.end(), { file, LoadExrLayers(file, { d->flow.get() })[0] });
+            guides[k][2] = it->second;
+        }
     if (plan.proxy > 1)
         for (const auto& [path, layers] : byFile)
             for (size_t k : layers) {

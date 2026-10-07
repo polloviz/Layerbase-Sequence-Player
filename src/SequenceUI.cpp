@@ -79,6 +79,12 @@ void App::refreshSequence()
         rematchCompare();
         replan = true;
     }
+    if (m_mvSeq) {
+        auto seq = std::make_shared<const Sequence>(RescanSequence(*m_mvSeq));
+        if (!seq->empty()) m_mvSeq = seq;
+        rematchMotionSequence();
+        replan = true;
+    }
     if (m_matteSeq) {
         Sequence seq = RescanSequence(*m_matteSeq);
         if (!seq.empty()) *m_matteSeq = std::move(seq);
@@ -134,6 +140,8 @@ void App::openVersion(const SequenceVersion& v)
     const std::vector<StackLayer> stack = m_stack;
     const std::shared_ptr<const Sequence> cmpSeq = m_cmpSeq;
     const std::wstring matteFirst = m_matteSeq ? m_matteSeq->frames[0].path : std::wstring();
+    const std::wstring motionFirst = m_mvSeq ? m_mvSeq->frames[0].path : std::wstring();
+    const std::string motionLayer = m_guideFlow;
     // A sequence tied to the shot takes the new version when it has one.
     auto versioned = [oldToken, token = v.token](const std::wstring& path) {
         const std::wstring p = ReplaceVersion(path, oldToken, token);
@@ -157,6 +165,10 @@ void App::openVersion(const SequenceVersion& v)
         }
         m_alphaOverride = alpha;
         if (!matteFirst.empty()) loadMatteSequence(versioned(matteFirst));
+        if (!motionFirst.empty() && loadMotionSequence(versioned(motionFirst)) && m_guideFlow != motionLayer) {
+            m_guideFlow = motionLayer;
+            denoiseSettingsChanged();
+        }
         if (hasCrypto() && matte != MatteMode::Off && stack.empty()) {
             m_crypto = std::clamp(crypto, 0, (int)cryptoLayers().size() - 1);
             m_cryptoSel = cryptoSel;

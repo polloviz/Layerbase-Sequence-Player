@@ -90,7 +90,8 @@ target_link_options(SequencePlayer PRIVATE /DELAYLOAD:bcrypt.dll /DELAYLOAD:cfgm
 # in git). OptiX itself is part of the NVIDIA driver. Without the headers the engine is unavailable.
 set(OPTIX_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/optix/include")
 if(EXISTS "${OPTIX_INCLUDE_DIR}/optix_stubs.h")
-    target_include_directories(SequencePlayer PRIVATE ${OPTIX_INCLUDE_DIR} third_party/cuda_shim)
+    # NVIDIA Optical Flow SDK headers (BSD 3-clause, in git): motion estimation for the temporal mode.
+    target_include_directories(SequencePlayer PRIVATE ${OPTIX_INCLUDE_DIR} third_party/cuda_shim third_party/nvof)
     target_compile_definitions(SequencePlayer PRIVATE SP_HAVE_OPTIX)
 else()
     message(WARNING "OptiX headers not found (run tools/get_optix.ps1): building without the OptiX denoiser")

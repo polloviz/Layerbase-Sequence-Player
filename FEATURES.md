@@ -137,7 +137,11 @@ the result, without opening compositing software.
 - Open Image Denoise is downloaded only the first time it is used, after asking (57 MB, official release, verified);
   OptiX comes with the NVIDIA driver. Nothing is loaded until you turn the filter on: opening a sequence stays just as fast.
 - **OptiX temporal** mode removes the flicker between frames: each frame is denoised together with the previous
-  denoised one, which follows moving objects through the renderer's motion vectors (e.g. the Cycles *Vector* pass).
+  denoised one, which follows moving objects through the **motion vector AOV** (e.g. the Cycles *Vector* pass, in the
+  EXR or in a sequence of its own). Without it the motion is estimated by the GPU's **NVIDIA Optical Flow** unit.
+- **Reduce trails**: where the previous frame does not match (uncovered areas, missing or wrong motion), the result
+  stays within the colors of the current frame, so moving objects leave no trails.
+- A **Strength** slider mixes the denoised frame with the original, to keep some grain and fine detail.
 - In the AOV stack each layer can be denoised on its own, and **batch conversion** can denoise every sequence
   (also from the command line with `--denoise`).
 - With A/B compare, B is left as it is: open the same shot as B for a before/after.

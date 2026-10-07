@@ -31,6 +31,8 @@ struct Settings {
     int oidnQuality = 0;                     // OidnQuality: 0 high, 1 balanced, 2 fast
     bool optixTemporal = false;              // OptiX: chain frames (less flicker)
     bool flowInvert = false, flowFlipY = false;   // motion vector convention of the renderer
+    bool denoiseAntiGhost = true;            // temporal: no trails where the previous frame does not match
+    int denoiseStrength = 100;               // percent: 0 = the original frame
     bool batchDenoise = false;               // batch conversion denoises every sequence
 
     // Movie export

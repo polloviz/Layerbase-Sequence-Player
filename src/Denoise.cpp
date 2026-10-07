@@ -468,7 +468,9 @@ ImagePtr DenoiseImage(const DenoiseInput& in, const DenoiseSpec& spec)
     }
 
     std::string device, err;
-    bool ok = false;
+    bool ok = false, chained = false;
+    DenoiseMotion motion = DenoiseMotion::None;
+    std::string flowNote;
     double ms = 0;
     {
         std::lock_guard lock(g_lock);
@@ -487,10 +489,15 @@ ImagePtr DenoiseImage(const DenoiseInput& in, const DenoiseSpec& spec)
             f.width = w;
             f.height = h;
             f.temporal = temporal;
+            f.estimateFlow = temporal && !useFlow && spec.estimateFlow;
+            f.antiGhost = temporal && spec.antiGhost;
             f.stream = &in.stream;
             f.frame = in.frame;
             f.out = out.data();
             ok = OptixDenoise(f, device, err);
+            chained = f.chained;
+            motion = f.motion;
+            flowNote = std::move(f.flowNote);
         } else {
             ok = OidnDenoise(rgb.data(), useAlbedo ? alb.data() : nullptr, useNormal ? nrm.data() : nullptr, w, h, spec, out.data(), device, err);
         }
@@ -504,6 +511,10 @@ ImagePtr DenoiseImage(const DenoiseInput& in, const DenoiseSpec& spec)
             g_status.error.clear();
             g_status.lastMs = ms;
             ++g_status.frames;
+            if (chained) {   // the first frame of a chain has no previous one to follow
+                g_status.motion = motion;
+                g_status.flowNote = flowNote;
+            }
         } else {
             g_status.error = err;
         }
@@ -517,7 +528,14 @@ ImagePtr DenoiseImage(const DenoiseInput& in, const DenoiseSpec& spec)
     }
     std::string label = std::string("denoised ") + engine;
     if (useAlbedo) label += useNormal ? " +albedo +normal" : " +albedo";
-    if (useFlow) label += " +motion";
+    if (motion == DenoiseMotion::Aov) label += " +motion vectors";
+    else if (motion == DenoiseMotion::Estimated) label += " +estimated motion";
+    // Strength: back towards the original frame. The temporal chain keeps the full result.
+    if (spec.strength < 1.0f) {
+        const float k = std::clamp(spec.strength, 0.0f, 1.0f);
+        for (size_t i = 0; i < out.size(); ++i) out[i] = rgb[i] + (out[i] - rgb[i]) * k;
+        label += " " + std::to_string(int(k * 100.0f + 0.5f)) + "%";
+    }
     return FromRgb(*color, out, label);
 }
 

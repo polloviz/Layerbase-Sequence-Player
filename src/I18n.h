@@ -376,7 +376,23 @@ enum class Lang { English = 0, Italian = 1 };
     X(GuideMotion,      "Motion", "Movimento") \
     X(FlowInvert,       "Invert", "Inverti") \
     X(FlowFlipY,        "Flip Y", "Inverti Y") \
-    X(GuidesTemporalHint, "Motion vectors (e.g. the Cycles Vector pass) let the previous frame follow moving objects; without them it is assumed still and moving objects can trail. If they trail more with vectors, try Invert or Flip Y. The temporal model uses no normal guide.", "I motion vector (es. il pass Vector di Cycles) fanno seguire al frame precedente gli oggetti in movimento; senza, viene considerato fermo e gli oggetti in movimento possono lasciare scie. Se con i vettori le scie aumentano, prova Inverti o Inverti Y. Il modello temporale non usa la guida normali.") \
+    X(GuidesTemporalHint, "The temporal model uses no normal guide.", "Il modello temporale non usa la guida normali.") \
+    X(MotionAov,        "Motion vector AOV", "AOV motion vector") \
+    X(MotionEstimate,   "Estimated from the frames", "Stimato dai frame") \
+    X(MotionAovHint,    "Lets the previous frame follow moving objects (e.g. the Cycles Vector pass, in this EXR or in a sequence of its own). Without it the motion is estimated by the Optical Flow unit of the GPU (GeForce RTX 20 / GTX 16 or later). If objects trail more with the AOV, try Invert or Flip Y.", "Fa seguire al frame precedente gli oggetti in movimento (es. il pass Vector di Cycles, in questo EXR o in una sequenza a parte). Senza, il movimento viene stimato dall'unità Optical Flow della GPU (GeForce RTX 20 / GTX 16 o successive). Se con l'AOV le scie aumentano, prova Inverti o Inverti Y.") \
+    X(LoadMotionAov,    "Load motion vector AOV sequence...", "Carica sequenza AOV motion vector...") \
+    X(MotionAovLoaded,  "Motion vector AOV loaded", "AOV motion vector caricata") \
+    X(RemoveMotionAov,  "Remove", "Rimuovi") \
+    X(MotionAovMissing, "frames without motion vectors", "frame senza motion vector") \
+    X(NotMotionAov,     "Not a motion vector AOV (EXR with 2 or more channels):", "Non è una AOV motion vector (EXR con almeno 2 canali):") \
+    X(AntiGhost,        "Reduce trails", "Riduci le scie") \
+    X(AntiGhostHint,    "Where the previous frame does not match this one (uncovered areas, missing or wrong motion) the result stays within the colors of this frame: no trails.", "Dove il frame precedente non corrisponde a questo (zone scoperte, movimento assente o sbagliato) il risultato resta entro i colori di questo frame: niente scie.") \
+    X(MotionByAov,      "motion vector AOV", "AOV motion vector") \
+    X(MotionByEstimate, "estimated (NVIDIA Optical Flow)", "stimato (NVIDIA Optical Flow)") \
+    X(MotionByNone,     "none: image assumed still", "nessuno: immagine considerata ferma") \
+    X(DenoiseStrength,  "Strength", "Intensità") \
+    X(DenoiseStrengthHint, "Mix with the original frame: below 100% some grain and fine detail come back.", "Miscela con il frame originale: sotto il 100% tornano un po' di grana e di dettaglio fine.") \
+    X(ReplaceMotionAov, "Motion vector AOV sequence", "Sequenza AOV motion vector") \
     X(BatchDenoise,     "Denoise every sequence", "Ripulisci ogni sequenza") \
     X(BatchDenoiseHint, "With the engine and guides of the Filters panel.", "Con motore e guide del pannello Filtri.")
 
